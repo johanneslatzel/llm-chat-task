@@ -19,12 +19,17 @@ fields:
 | `title` | string | Short, specific, imperative title. |
 | `description` | string | The goal: what to do and why. |
 | `acceptanceCriteria` | string[] | Testable definition of done. |
-| `priority` | enum | `low`, `medium` or `high`; absent means no urgency. |
+| `milestone` | string | Optional identifier-style grouping label tying the task to a milestone (e.g. `release-2026-q3`). |
+| `priority` | enum | `low`, `medium` or `high`; newly created tasks default to `low`. |
 | `type` | enum | `feature`, `bug`, `refactor`, `chore` or `research`. |
 | `links` | string[] | Reference URLs. |
 | `steps`, `constraints`, `outOfScope`, `verification`, `context`, `edgeCases` | string[] | The plan arrays: execution steps, guardrails, non-goals, verification commands, context, and known pitfalls. |
 
 String-array items are trimmed and must be non-empty; links must be valid URLs.
+Milestones are trimmed too; an empty or whitespace-only value means "no
+milestone", so passing `''` to `updateTask` clears the field. A non-empty
+milestone is identifier-style: it must contain no whitespace characters and
+consist of printable ASCII only (code points 0x20-0x7E).
 The plan arrays mirror the guidance from LLM-agent task-spec literature: state
 the goal, provide context and constraints, define done, and call out edge cases.
 
@@ -56,6 +61,7 @@ values are clamped to a minimum of 1.
 | ----- | ------- | ------- |
 | `maxTitleLength` | 100 | `LLM_CHAT_TASK_MAX_TITLE_LENGTH` |
 | `maxDescriptionLength` | 500 | `LLM_CHAT_TASK_MAX_DESCRIPTION_LENGTH` |
+| `maxMilestoneLength` | 64 | `LLM_CHAT_TASK_MAX_MILESTONE_LENGTH` |
 | `maxAcceptanceCriteriaCount` | 10 | `LLM_CHAT_TASK_MAX_ACCEPTANCE_CRITERIA_COUNT` |
 | `maxAcceptanceCriteriaLength` | 200 | `LLM_CHAT_TASK_MAX_ACCEPTANCE_CRITERIA_LENGTH` |
 | `maxLinksPerTask` | 20 | `LLM_CHAT_TASK_MAX_LINKS_PER_TASK` |
@@ -74,8 +80,12 @@ fall back to the default (or clamp to 1).
 `TaskPool` is an in-memory `Record<id, Task>` guarded by an `async-mutex`:
 
 - `createTask(input)`: validates and creates a `ready` task from a
-  `CreateTaskInput` (`title` required), returning its `UUID`
+  `CreateTaskInput` (`title` required), returning its `UUID`; an omitted
+  priority defaults to `low` (loading a file never applies the default)
 - `getTask(id)`: returns a task by id, or `undefined`
+- `resolveId(idOrPrefix)`: resolves a full id or a unique prefix of at least
+  `MIN_ID_PREFIX_LENGTH` characters (default 8) to a task; exact matches win,
+  ambiguous prefixes report all candidate ids, shorter input reports `too-short`
 - `getTasks()`: all tasks
 - `getAvailableTasks()`: tasks that are not done and whose dependencies are all finished
 - `getUnfinishedDependencyIds(taskId)`: the dependency ids of a task that still block it
@@ -138,9 +148,9 @@ abstract class ToolPackage {
 
 | Tool | Description |
 | ---- | ----------- |
-| `create_task` | Create a task from a `title` plus optional structured fields: description, acceptance_criteria, priority, type, links, and the six plan arrays. All values validated against the configured limits. |
-| `read_task` | Read a task by id (full structured fields and progress log), list all tasks that are not done, list available tasks (`available` flag), and filter listings by `status`, `priority` or `type`. Listings preview long text fields at `historyPreviewLength`. |
-| `update_task` | Set a task status, refine any structured field (title, description, priority, type, and the array fields; arrays replace the whole list), append a progress-log entry, and/or add a dependency. |
+| `create_task` | Create a task from a `title` plus optional structured fields: description, milestone, acceptance_criteria, priority, type, links, and the six plan arrays. All values validated against the configured limits. |
+| `read_task` | Read a task by id (full structured fields and progress log; shortened ids of at least 8 characters accepted when unique), list all tasks that are not done, list available tasks (`available` flag), filter listings by `status`, `priority`, `type` or exact `milestone`, and search task fields with a case-insensitive JavaScript regex (`query` + optional `strict` flag), with matches annotated via `matchedFields`. Listings preview long text fields at `historyPreviewLength`. |
+| `update_task` | Set a task status, refine any structured field (title, description, milestone — empty string clears it, priority, type, and the array fields; arrays replace the whole list), append a progress-log entry, and/or add a dependency. Accepts shortened ids for both `id` and `dependency_id`. |
 
 ## Dependencies
 

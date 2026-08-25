@@ -13,17 +13,19 @@
 
 Task pool and task management tools for the `llm-chat` ecosystem. Lets an agent
 track work items, order them with dependencies, pick the next available task,
-and record results. Each task carries a short title plus structured plan fields:
-description, acceptance criteria, priority, type, reference links, and plan
-arrays for steps, context, constraints, out-of-scope work, verification, and
-edge cases. Tasks read as small, executable specs.
+group them into milestones, and record results. Each task carries a short title
+plus structured plan fields: description, acceptance criteria, priority, type,
+reference links, and plan arrays for steps, context, constraints, out-of-scope
+work, verification, and edge cases. Tasks read as small, executable specs.
 
 ## Features
 
 - in-memory task store with dependency tracking, cycle detection, and optional file persistence
 - structured tasks: title (required) + description, acceptance criteria, priority, type, links, and plan arrays
+- optional milestone grouping label per task; `read_task` filters listings by exact milestone
 - instructive tool descriptions that coach the LLM on how to fill each field
-- `read_task` filters by status, priority, and type
+- `read_task` filters by status, priority, type, and milestone, searches all task fields with a case-insensitive regex, and annotates matches with the fields that matched
+- shortened task ids (at least 8 characters) are accepted wherever an id is expected, for reading, updating, and declaring dependencies
 
 ## Prerequisites
 

@@ -4,6 +4,7 @@ import {
     DEFAULT_MAX_DESCRIPTION_LENGTH,
     DEFAULT_MAX_HISTORY_LENGTH,
     DEFAULT_MAX_LINKS_PER_TASK,
+    DEFAULT_MAX_MILESTONE_LENGTH,
     DEFAULT_MAX_PLAN_FIELD_COUNT,
     DEFAULT_MAX_PLAN_FIELD_LENGTH,
     DEFAULT_MAX_TITLE_LENGTH,
@@ -15,6 +16,7 @@ import { envInt } from '../env.js';
 export type TaskConfigurationOptions = {
     maxTitleLength?: number;
     maxDescriptionLength?: number;
+    maxMilestoneLength?: number;
     maxAcceptanceCriteriaCount?: number;
     maxAcceptanceCriteriaLength?: number;
     maxLinksPerTask?: number;
@@ -31,6 +33,9 @@ export class TaskConfiguration {
 
     /** Maximum description length after trimming (env: `LLM_CHAT_TASK_MAX_DESCRIPTION_LENGTH`). */
     maxDescriptionLength: number;
+
+    /** Maximum milestone length after trimming (env: `LLM_CHAT_TASK_MAX_MILESTONE_LENGTH`). */
+    maxMilestoneLength: number;
 
     /** Maximum number of acceptance criteria items (env: `LLM_CHAT_TASK_MAX_ACCEPTANCE_CRITERIA_COUNT`). */
     maxAcceptanceCriteriaCount: number;
@@ -60,6 +65,9 @@ export class TaskConfiguration {
         this.maxDescriptionLength =
             options?.maxDescriptionLength ??
             envInt('LLM_CHAT_TASK_MAX_DESCRIPTION_LENGTH', DEFAULT_MAX_DESCRIPTION_LENGTH, 1);
+        this.maxMilestoneLength =
+            options?.maxMilestoneLength ??
+            envInt('LLM_CHAT_TASK_MAX_MILESTONE_LENGTH', DEFAULT_MAX_MILESTONE_LENGTH, 1);
         this.maxAcceptanceCriteriaCount =
             options?.maxAcceptanceCriteriaCount ??
             envInt(

@@ -25,8 +25,9 @@ A task carries the following fields:
 | ----- | ---- | ----------- |
 | `title` | string (required) | Short, specific, imperative title. Non-empty, at most `maxTitleLength` (default 100). |
 | `description` | string (optional) | The goal: what to do and why. At most `maxDescriptionLength` (default 500). |
+| `milestone` | string (optional) | Identifier-style grouping label, e.g. `release-2026-q3`. Printable ASCII without whitespace, at most `maxMilestoneLength` (default 64); empty or whitespace-only stores no milestone. |
 | `acceptanceCriteria` | string[] (optional) | Testable definition of done. At most `maxAcceptanceCriteriaCount` (default 10) items of `maxAcceptanceCriteriaLength` (default 200) characters each. |
-| `priority` | `low \| medium \| high` (optional) | Stated importance. Absent means no urgency. |
+| `priority` | `low \| medium \| high` (optional) | Stated importance. `createTask` defaults it to `low` when omitted; absence only occurs on tasks loaded from files stored before the default existed. |
 | `type` | `feature \| bug \| refactor \| chore \| research` (optional) | Kind of work. |
 | `links` | string[] (optional) | Reference URLs. At most `maxLinksPerTask` (default 20), each a valid URL. |
 | `steps` | string[] (optional) | Ordered execution plan. |
@@ -74,6 +75,7 @@ const pool = new TaskPool(new TaskConfiguration({ maxTitleLength: 80 }));
 | ----- | ------- | ------- |
 | `maxTitleLength` | 100 | `LLM_CHAT_TASK_MAX_TITLE_LENGTH` |
 | `maxDescriptionLength` | 500 | `LLM_CHAT_TASK_MAX_DESCRIPTION_LENGTH` |
+| `maxMilestoneLength` | 64 | `LLM_CHAT_TASK_MAX_MILESTONE_LENGTH` |
 | `maxAcceptanceCriteriaCount` | 10 | `LLM_CHAT_TASK_MAX_ACCEPTANCE_CRITERIA_COUNT` |
 | `maxAcceptanceCriteriaLength` | 200 | `LLM_CHAT_TASK_MAX_ACCEPTANCE_CRITERIA_LENGTH` |
 | `maxLinksPerTask` | 20 | `LLM_CHAT_TASK_MAX_LINKS_PER_TASK` |
@@ -90,6 +92,7 @@ the same `TaskPool` enforces its limits consistently for its whole lifetime.
 Creates a task from a `CreateTaskInput` (`title` required; all other fields
 optional) and returns its `UUID`. Descriptions, titles, and array items are
 trimmed; invalid enums, URLs, empty items, and over-long values are rejected.
+An omitted `priority` defaults to `low`.
 
 ### `updateTask(id, changes)`
 
@@ -102,6 +105,7 @@ trimmed; invalid enums, URLs, empty items, and over-long values are rejected.
 | `addDependency` | string | Id of a task to add as a dependency. Rejects missing ids, self-dependencies, duplicates, cycles, and any dependency on a task that is `in_progress` or `done`; unfinished dependencies set the task to `pending`. |
 | `title` | string | Replaces the title. Must be non-empty and at most `maxTitleLength`. |
 | `description` | string | Replaces the description. Must be non-empty and at most `maxDescriptionLength`. |
+| `milestone` | string | Replaces the milestone (printable ASCII without whitespace, at most `maxMilestoneLength`); empty or whitespace-only clears it. |
 | `acceptanceCriteria` | string[] | Replaces the whole array (validated like create). |
 | `priority` / `type` | enum | Replaces the value. |
 | `links` | string[] | Replaces the whole array (validated like create). |
@@ -124,6 +128,7 @@ field productively.
 | --------- | ---- | -------- | ----------- |
 | `title` | string | yes | Short, specific, imperative title. At most `maxTitleLength` (default 100). |
 | `description` | string | no | What to do and why; current vs expected behavior where relevant. At most `maxDescriptionLength` (default 500). |
+| `milestone` | string | no | Identifier-style grouping label, e.g. `release-2026-q3`. Printable ASCII without whitespace, at most `maxMilestoneLength` (default 64); empty or whitespace-only stores no milestone. |
 | `acceptance_criteria` | string[] | no | Testable definition of done (Given/When/Then or checklist). At most 10 items of 200 characters. |
 | `steps` | string[] | no | Ordered execution plan. |
 | `context` | string[] | no | Relevant files, patterns, architectural decisions. |
@@ -131,7 +136,7 @@ field productively.
 | `out_of_scope` | string[] | no | Explicitly excluded work. |
 | `verification` | string[] | no | Commands or checks that confirm the work is done. |
 | `edge_cases` | string[] | no | Known pitfalls and edge conditions. |
-| `priority` | string | no | `low`, `medium` or `high`. Omit when there is no urgency. |
+| `priority` | string | no | `low`, `medium` or `high`. Defaults to low when omitted. |
 | `type` | string | no | `feature`, `bug`, `refactor`, `chore` or `research`. |
 | `links` | string[] | no | Reference URLs. At most 20, each a valid URL. |
 
@@ -141,23 +146,30 @@ field productively.
 
 Reads tasks. Pass an `id` to read a single task (full structured fields and
 progress log), set `available` to list tasks that can be worked on right now,
-or omit both to list all tasks that are not done.
+pass `query` to search task fields with a regex, or omit all three to list all
+tasks that are not done.
 
 **Parameters:**
 
 | Parameter | Type | Required | Description |
 | --------- | ---- | -------- | ----------- |
-| `id` | string | no | The id of the task to read. Mutually exclusive with `available`. |
+| `id` | string | no | The id of the task to read. A shortened id of at least `MIN_ID_PREFIX_LENGTH` (default 8) characters is accepted when it matches exactly one task; an exact full-id match always wins. Ambiguous prefixes are rejected with the list of matching ids. Mutually exclusive with `available` and `query`. |
+| `query` | string | no | JavaScript regex matched case-insensitively against title, description, id, history and every string-array item. Mutually exclusive with `id`; composes with `available`, `status`, `priority` and `type`. A whitespace-only query is ignored. |
+| `strict` | boolean | no | When true (default), `query` is compiled with the Unicode `u` flag, which rejects legacy escape sequences like `\"`. Set false to allow such escapes (the pattern is then compiled with only the `i` flag). |
 | `available` | boolean | no | When true, list only tasks with no unfinished dependencies that are not done. Mutually exclusive with `id`. |
 | `status` | string | no | Filter listings by status (`pending`, `ready`, `in_progress`, `done`). |
 | `priority` | string | no | Filter listings by priority (`low`, `medium`, `high`). |
 | `type` | string | no | Filter listings by type (`feature`, `bug`, `refactor`, `chore`, `research`). |
+| `milestone` | string | no | Filter listings by exact milestone (compared after trimming); a value no task has yields an empty listing. Composes with the other filters. |
 
-**Returns:** JSON. With `id`: the task with all fields plus `unfinishedDependencies`.
-Without: a JSON array of the same objects, but long text fields (including
-`history` and each string-array item) are truncated to a
-`historyPreviewLength`-character preview (default 200, suffix `...`). Unknown
-ids return an error.
+**Returns:** JSON. With `id`: the task with all fields plus `unfinishedDependencies`
+(short ids resolve to the full task). Without: a JSON array of the same objects,
+but long text fields (including `history` and each string-array item) are
+truncated to a `historyPreviewLength`-character preview (default 200, suffix
+`...`). When `query` is active, each match carries `matchedFields` naming the
+fields that matched, e.g. `["title", "steps[2]"]`, and non-matching tasks are
+omitted. Invalid regexes, unknown ids, too-short ids and ambiguous prefixes
+return an error.
 
 ## update_task
 
@@ -169,12 +181,13 @@ caller to record a completion summary in `history` when marking a task done.
 
 | Parameter | Type | Required | Description |
 | --------- | ---- | -------- | ----------- |
-| `id` | string | yes | The id of the task to update. |
+| `id` | string | yes | The id of the task to update. A shortened id of at least 8 characters is accepted when it matches exactly one task; success messages echo the resolved full UUID. |
 | `status` | string | no | `ready`, `in_progress` or `done`. `pending` is derived automatically. Mutually exclusive with `dependency_id`. |
 | `history` | string | no | Appends a timestamped entry to the task's progress log (capped at `maxHistoryLength` characters, default 10,000). |
-| `dependency_id` | string | no | The id of a task this task should depend on. Mutually exclusive with `status`. |
+| `dependency_id` | string | no | The id of a task this task should depend on; shortened ids are accepted like `id`. Mutually exclusive with `status`. |
 | `title` | string | no | New title (non-empty, at most `maxTitleLength`). |
 | `description` | string | no | New description (non-empty, at most `maxDescriptionLength`). |
+| `milestone` | string | no | New identifier-style milestone label (printable ASCII without whitespace, at most `maxMilestoneLength`); an empty string clears the milestone. |
 | `acceptance_criteria` | string[] | no | New acceptance criteria list; replaces the whole array. |
 | `steps` | string[] | no | New steps list; replaces the whole array. |
 | `context` | string[] | no | New context list; replaces the whole array. |
@@ -188,8 +201,21 @@ caller to record a completion summary in `history` when marking a task done.
 
 **Returns:** `"Task updated with id: <id>, status: <status>"`, extended with a
 per-updated-field suffix (e.g. `", title updated"`, `", progress entry
-recorded"`, `", now depends on <id>"`). Errors on unknown ids, invalid
-statuses, invalid field values, or dependency problems.
+recorded"`, `", now depends on <id>"`). `<id>` is always the resolved full
+UUID, even when a shortened id was passed. Errors on unknown ids, too-short
+ids, ambiguous prefixes, invalid statuses, invalid field values, or dependency
+problems.
+
+### `resolveId(idOrPrefix)`
+
+Resolves a full task id or a shortened prefix of one. An exact id match always
+wins. Otherwise input of at least `MIN_ID_PREFIX_LENGTH` characters is matched
+case-insensitively against the canonical ids: a unique match returns
+`{ kind: 'prefix', task }`, several matches return
+`{ kind: 'ambiguous', candidates }` with all matching UUIDs in insertion order,
+and no match returns `{ kind: 'not-found' }`. Shorter input yields
+`{ kind: 'too-short' }`. Both `read_task` and `update_task` use this, so agents
+can pass the 8-character prefixes commonly copied from listings.
 
 ---
 

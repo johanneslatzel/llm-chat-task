@@ -4,6 +4,12 @@ export const DEFAULT_MAX_TITLE_LENGTH = 100;
 /** Default maximum length of a task description (after trimming). */
 export const DEFAULT_MAX_DESCRIPTION_LENGTH = 500;
 
+/**
+ * Default maximum length of a task milestone (after trimming). Milestones are
+ * identifier-style labels: printable ASCII without whitespace.
+ */
+export const DEFAULT_MAX_MILESTONE_LENGTH = 64;
+
 /** Default maximum number of acceptance criteria items. */
 export const DEFAULT_MAX_ACCEPTANCE_CRITERIA_COUNT = 10;
 
@@ -24,3 +30,6 @@ export const DEFAULT_MAX_HISTORY_LENGTH = 10_000;
 
 /** Default preview length used when listing tasks (full log only in single-task reads). */
 export const DEFAULT_HISTORY_PREVIEW_LENGTH = 200;
+
+/** Minimum number of characters for a shortened task id prefix accepted by `TaskPool.resolveId`. */
+export const MIN_ID_PREFIX_LENGTH = 8;

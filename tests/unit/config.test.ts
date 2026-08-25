@@ -5,6 +5,7 @@ import {
     DEFAULT_MAX_DESCRIPTION_LENGTH,
     DEFAULT_MAX_HISTORY_LENGTH,
     DEFAULT_MAX_LINKS_PER_TASK,
+    DEFAULT_MAX_MILESTONE_LENGTH,
     DEFAULT_MAX_PLAN_FIELD_COUNT,
     DEFAULT_MAX_PLAN_FIELD_LENGTH,
     DEFAULT_MAX_TITLE_LENGTH,
@@ -15,6 +16,7 @@ import { TaskConfiguration } from '../../src/lib/config.js';
 const ENV_KEYS = [
     'LLM_CHAT_TASK_MAX_TITLE_LENGTH',
     'LLM_CHAT_TASK_MAX_DESCRIPTION_LENGTH',
+    'LLM_CHAT_TASK_MAX_MILESTONE_LENGTH',
     'LLM_CHAT_TASK_MAX_ACCEPTANCE_CRITERIA_COUNT',
     'LLM_CHAT_TASK_MAX_ACCEPTANCE_CRITERIA_LENGTH',
     'LLM_CHAT_TASK_MAX_LINKS_PER_TASK',
@@ -35,6 +37,7 @@ describe('TaskConfiguration', () => {
         const config = new TaskConfiguration();
         expect(config.maxTitleLength).toBe(DEFAULT_MAX_TITLE_LENGTH);
         expect(config.maxDescriptionLength).toBe(DEFAULT_MAX_DESCRIPTION_LENGTH);
+        expect(config.maxMilestoneLength).toBe(DEFAULT_MAX_MILESTONE_LENGTH);
         expect(config.maxAcceptanceCriteriaCount).toBe(DEFAULT_MAX_ACCEPTANCE_CRITERIA_COUNT);
         expect(config.maxAcceptanceCriteriaLength).toBe(DEFAULT_MAX_ACCEPTANCE_CRITERIA_LENGTH);
         expect(config.maxLinksPerTask).toBe(DEFAULT_MAX_LINKS_PER_TASK);
@@ -47,6 +50,7 @@ describe('TaskConfiguration', () => {
     it('prefers explicitly provided options over the environment', () => {
         process.env.LLM_CHAT_TASK_MAX_TITLE_LENGTH = '5';
         process.env.LLM_CHAT_TASK_MAX_DESCRIPTION_LENGTH = '10';
+        process.env.LLM_CHAT_TASK_MAX_MILESTONE_LENGTH = '11';
         process.env.LLM_CHAT_TASK_MAX_ACCEPTANCE_CRITERIA_COUNT = '2';
         process.env.LLM_CHAT_TASK_MAX_ACCEPTANCE_CRITERIA_LENGTH = '3';
         process.env.LLM_CHAT_TASK_MAX_LINKS_PER_TASK = '4';
@@ -57,6 +61,7 @@ describe('TaskConfiguration', () => {
         const config = new TaskConfiguration({
             maxTitleLength: 20,
             maxDescriptionLength: 30,
+            maxMilestoneLength: 31,
             maxAcceptanceCriteriaCount: 4,
             maxAcceptanceCriteriaLength: 5,
             maxLinksPerTask: 6,
@@ -67,6 +72,7 @@ describe('TaskConfiguration', () => {
         });
         expect(config.maxTitleLength).toBe(20);
         expect(config.maxDescriptionLength).toBe(30);
+        expect(config.maxMilestoneLength).toBe(31);
         expect(config.maxAcceptanceCriteriaCount).toBe(4);
         expect(config.maxAcceptanceCriteriaLength).toBe(5);
         expect(config.maxLinksPerTask).toBe(6);
@@ -79,21 +85,23 @@ describe('TaskConfiguration', () => {
     it('reads values from the LLM_CHAT_TASK_* environment variables', () => {
         process.env.LLM_CHAT_TASK_MAX_TITLE_LENGTH = '12';
         process.env.LLM_CHAT_TASK_MAX_DESCRIPTION_LENGTH = '13';
-        process.env.LLM_CHAT_TASK_MAX_ACCEPTANCE_CRITERIA_COUNT = '14';
-        process.env.LLM_CHAT_TASK_MAX_ACCEPTANCE_CRITERIA_LENGTH = '15';
-        process.env.LLM_CHAT_TASK_MAX_LINKS_PER_TASK = '16';
-        process.env.LLM_CHAT_TASK_MAX_PLAN_FIELD_COUNT = '17';
-        process.env.LLM_CHAT_TASK_MAX_PLAN_FIELD_LENGTH = '18';
+        process.env.LLM_CHAT_TASK_MAX_MILESTONE_LENGTH = '14';
+        process.env.LLM_CHAT_TASK_MAX_ACCEPTANCE_CRITERIA_COUNT = '15';
+        process.env.LLM_CHAT_TASK_MAX_ACCEPTANCE_CRITERIA_LENGTH = '16';
+        process.env.LLM_CHAT_TASK_MAX_LINKS_PER_TASK = '17';
+        process.env.LLM_CHAT_TASK_MAX_PLAN_FIELD_COUNT = '18';
+        process.env.LLM_CHAT_TASK_MAX_PLAN_FIELD_LENGTH = '19';
         process.env.LLM_CHAT_TASK_MAX_HISTORY_LENGTH = '50';
         process.env.LLM_CHAT_TASK_HISTORY_PREVIEW_LENGTH = '5';
         const config = new TaskConfiguration();
         expect(config.maxTitleLength).toBe(12);
         expect(config.maxDescriptionLength).toBe(13);
-        expect(config.maxAcceptanceCriteriaCount).toBe(14);
-        expect(config.maxAcceptanceCriteriaLength).toBe(15);
-        expect(config.maxLinksPerTask).toBe(16);
-        expect(config.maxPlanFieldCount).toBe(17);
-        expect(config.maxPlanFieldLength).toBe(18);
+        expect(config.maxMilestoneLength).toBe(14);
+        expect(config.maxAcceptanceCriteriaCount).toBe(15);
+        expect(config.maxAcceptanceCriteriaLength).toBe(16);
+        expect(config.maxLinksPerTask).toBe(17);
+        expect(config.maxPlanFieldCount).toBe(18);
+        expect(config.maxPlanFieldLength).toBe(19);
         expect(config.maxHistoryLength).toBe(50);
         expect(config.historyPreviewLength).toBe(5);
     });
@@ -101,6 +109,7 @@ describe('TaskConfiguration', () => {
     it('falls back to defaults when an environment value is invalid', () => {
         process.env.LLM_CHAT_TASK_MAX_TITLE_LENGTH = 'nope';
         process.env.LLM_CHAT_TASK_MAX_DESCRIPTION_LENGTH = 'nope';
+        process.env.LLM_CHAT_TASK_MAX_MILESTONE_LENGTH = '0';
         process.env.LLM_CHAT_TASK_MAX_ACCEPTANCE_CRITERIA_COUNT = '';
         process.env.LLM_CHAT_TASK_MAX_ACCEPTANCE_CRITERIA_LENGTH = '';
         process.env.LLM_CHAT_TASK_MAX_LINKS_PER_TASK = '0';
@@ -111,6 +120,7 @@ describe('TaskConfiguration', () => {
         const config = new TaskConfiguration();
         expect(config.maxTitleLength).toBe(DEFAULT_MAX_TITLE_LENGTH);
         expect(config.maxDescriptionLength).toBe(DEFAULT_MAX_DESCRIPTION_LENGTH);
+        expect(config.maxMilestoneLength).toBe(1);
         expect(config.maxAcceptanceCriteriaCount).toBe(DEFAULT_MAX_ACCEPTANCE_CRITERIA_COUNT);
         expect(config.maxAcceptanceCriteriaLength).toBe(DEFAULT_MAX_ACCEPTANCE_CRITERIA_LENGTH);
         expect(config.maxLinksPerTask).toBe(1);

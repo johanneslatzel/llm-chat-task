@@ -1,9 +1,65 @@
 import { describe, it, expect, vi } from 'vitest';
 import { TaskPool, UpdateTaskTool } from '../../src/index.js';
 import { ResultStatus } from '@johannes.latzel/llm-chat';
+import { createTempDir, removeTempDir, createTempFile } from '../index.js';
 
 describe('UpdateTaskTool', () => {
-    it('reports a missing id', async () => {
+    it('sets the milestone and reports it', async () => {
+        const pool = new TaskPool();
+        const id = await pool.createTask({ title: 'Task A' });
+        const tool = new UpdateTaskTool(pool);
+        const result = await tool.execute({ id, milestone: '  v2-release  ' });
+        expect(result[0]!.status).toBe(ResultStatus.Success);
+        expect(result[0]!.result).toContain('milestone updated');
+        expect(pool.getTask(id)!.milestone).toBe('v2-release');
+    });
+
+    it('replaces an existing milestone', async () => {
+        const pool = new TaskPool();
+        const id = await pool.createTask({ title: 'Task A', milestone: 'v1' });
+        const tool = new UpdateTaskTool(pool);
+        const result = await tool.execute({ id, milestone: 'v2' });
+        expect(result[0]!.status).toBe(ResultStatus.Success);
+        expect(result[0]!.result).toContain('milestone updated');
+        expect(pool.getTask(id)!.milestone).toBe('v2');
+    });
+
+    it('clears the milestone with an empty string', async () => {
+        const pool = new TaskPool();
+        const id = await pool.createTask({ title: 'Task A', milestone: 'v1' });
+        const tool = new UpdateTaskTool(pool);
+        const result = await tool.execute({ id, milestone: '' });
+        expect(result[0]!.status).toBe(ResultStatus.Success);
+        expect(result[0]!.result).toContain('milestone updated');
+        expect(pool.getTask(id)!.milestone).toBeUndefined();
+    });
+
+    it('clearing a missing milestone succeeds as a no-op', async () => {
+        const pool = new TaskPool();
+        const id = await pool.createTask({ title: 'Task A' });
+        const tool = new UpdateTaskTool(pool);
+        const result = await tool.execute({ id, milestone: '   ' });
+        expect(result[0]!.status).toBe(ResultStatus.Success);
+        expect(result[0]!.result).toContain('milestone updated');
+        expect(pool.getTask(id)!.milestone).toBeUndefined();
+    });
+
+    it('surfaces pool errors for an invalid milestone', async () => {
+        const pool = new TaskPool();
+        const id = await pool.createTask({ title: 'Task A' });
+        const tool = new UpdateTaskTool(pool);
+        const result = await tool.execute({ id, milestone: 'm'.repeat(65) });
+        expect(result[0]!.status).toBe(ResultStatus.Error);
+        expect(result[0]!.result).toContain('Milestone must be at most 64 characters');
+        const spaced = await tool.execute({ id, milestone: 'bad label' });
+        expect(spaced[0]!.status).toBe(ResultStatus.Error);
+        expect(spaced[0]!.result).toContain('Milestone must not contain whitespace');
+        const nonAscii = await tool.execute({ id, milestone: 'café' });
+        expect(nonAscii[0]!.status).toBe(ResultStatus.Error);
+        expect(nonAscii[0]!.result).toContain('Milestone must contain only ASCII characters');
+    });
+
+    it('reports missing id', async () => {
         const tool = new UpdateTaskTool(new TaskPool());
         const result = await tool.execute({});
         expect(result[0]!.status).toBe(ResultStatus.Error);
@@ -215,6 +271,7 @@ describe('UpdateTaskTool', () => {
             dependency_id: 9,
             title: 5,
             description: {},
+            milestone: {},
             priority: [],
             acceptance_criteria: 'nope',
             steps: 0
@@ -227,17 +284,140 @@ describe('UpdateTaskTool', () => {
         expect(task.history).toBe('');
         expect(task.dependencies).toEqual([]);
         expect(task.description).toBeUndefined();
-        expect(task.priority).toBeUndefined();
+        expect(task.milestone).toBeUndefined();
+        expect(task.priority).toBe('low');
         expect(task.acceptanceCriteria).toBeUndefined();
         expect(task.steps).toBeUndefined();
     });
 
     it('surfaces pool errors', async () => {
         const pool = new TaskPool();
+        const id = await pool.createTask({ title: 'Task A' });
         vi.spyOn(pool, 'updateTask').mockRejectedValueOnce(new Error('pool failure'));
         const tool = new UpdateTaskTool(pool);
-        const result = await tool.execute({ id: 'some-id', status: 'done' });
+        const result = await tool.execute({ id, status: 'done' });
         expect(result[0]!.status).toBe(ResultStatus.Error);
         expect(result[0]!.result).toBe('pool failure');
+    });
+
+    it('updates a task via unique shortened id and echoes the full id', async () => {
+        const pool = new TaskPool();
+        const id = await pool.createTask({ title: 'Task A' });
+        const tool = new UpdateTaskTool(pool);
+        const result = await tool.execute({ id: id.slice(0, 8), status: 'in_progress' });
+        expect(result[0]!.status).toBe(ResultStatus.Success);
+        expect(result[0]!.result).toContain('Task updated with id: ' + id);
+        expect(pool.getTask(id)!.status).toBe('in_progress');
+    });
+
+    it('adds a dependency referenced by shortened id', async () => {
+        const pool = new TaskPool();
+        const idA = await pool.createTask({ title: 'Task A' });
+        const idB = await pool.createTask({ title: 'Task B' });
+        const tool = new UpdateTaskTool(pool);
+        const result = await tool.execute({ id: idB, dependency_id: idA.slice(0, 8) });
+        expect(result[0]!.status).toBe(ResultStatus.Success);
+        expect(result[0]!.result).toContain('now depends on ' + idA);
+        expect(pool.getTask(idB)!.dependencies).toEqual([idA]);
+    });
+
+    it('reports ambiguous, too-short and not-found for unresolvable ids', async () => {
+        const tmpDir = createTempDir();
+        try {
+            const filePath = createTempFile(
+                tmpDir,
+                'tasks.json',
+                JSON.stringify({
+                    tasks: [
+                        {
+                            id: 'aaaaaaaa-1111-4111-8111-111111111111',
+                            title: 'A',
+                            history: '',
+                            status: 'ready',
+                            dependencyIds: []
+                        },
+                        {
+                            id: 'aaaaaaaa-2222-4222-8222-222222222222',
+                            title: 'B',
+                            history: '',
+                            status: 'ready',
+                            dependencyIds: []
+                        }
+                    ]
+                })
+            );
+            const tool = new UpdateTaskTool(await TaskPool.load(filePath));
+            const ambiguous = await tool.execute({ id: 'aaaaaaaa', status: 'done' });
+            expect(ambiguous[0]!.status).toBe(ResultStatus.Error);
+            expect(ambiguous[0]!.result).toContain('Ambiguous id prefix');
+            expect(ambiguous[0]!.result).toContain('aaaaaaaa-1111-4111-8111-111111111111');
+            expect(ambiguous[0]!.result).toContain('aaaaaaaa-2222-4222-8222-222222222222');
+            const tooShort = await tool.execute({ id: 'abc', status: 'done' });
+            expect(tooShort[0]!.status).toBe(ResultStatus.Error);
+            expect(tooShort[0]!.result).toContain('at least 8 characters');
+            const missing = await tool.execute({ id: 'ffffffff', status: 'done' });
+            expect(missing[0]!.status).toBe(ResultStatus.Error);
+            expect(missing[0]!.result).toContain('not found');
+        } finally {
+            removeTempDir(tmpDir);
+        }
+    });
+
+    it('reports ambiguous and too-short for unresolvable dependency ids without changing the task', async () => {
+        const tmpDir = createTempDir();
+        try {
+            const filePath = createTempFile(
+                tmpDir,
+                'tasks.json',
+                JSON.stringify({
+                    tasks: [
+                        {
+                            id: 'bbbbbbbb-1111-4111-8111-111111111111',
+                            title: 'Target',
+                            history: '',
+                            status: 'ready',
+                            dependencyIds: []
+                        },
+                        {
+                            id: 'aaaaaaaa-1111-4111-8111-111111111111',
+                            title: 'A',
+                            history: '',
+                            status: 'ready',
+                            dependencyIds: []
+                        },
+                        {
+                            id: 'aaaaaaaa-2222-4222-8222-222222222222',
+                            title: 'B',
+                            history: '',
+                            status: 'ready',
+                            dependencyIds: []
+                        }
+                    ]
+                })
+            );
+            const pool = await TaskPool.load(filePath);
+            const tool = new UpdateTaskTool(pool);
+            const targetId = 'bbbbbbbb-1111-4111-8111-111111111111';
+            const ambiguous = await tool.execute({ id: targetId, dependency_id: 'aaaaaaaa' });
+            expect(ambiguous[0]!.status).toBe(ResultStatus.Error);
+            expect(ambiguous[0]!.result).toContain("Ambiguous id prefix 'aaaaaaaa'");
+            const tooShort = await tool.execute({ id: targetId, dependency_id: 'a' });
+            expect(tooShort[0]!.status).toBe(ResultStatus.Error);
+            expect(tooShort[0]!.result).toContain('at least 8 characters');
+            expect(pool.getTask(targetId)!.dependencies).toEqual([]);
+            expect(pool.getTask(targetId)!.status).toBe('ready');
+        } finally {
+            removeTempDir(tmpDir);
+        }
+    });
+
+    it('rejects self-dependency expressed through a shortened id', async () => {
+        const pool = new TaskPool();
+        const id = await pool.createTask({ title: 'Task A' });
+        const tool = new UpdateTaskTool(pool);
+        const result = await tool.execute({ id: id.slice(0, 8), dependency_id: id.slice(0, 8) });
+        expect(result[0]!.status).toBe(ResultStatus.Error);
+        expect(result[0]!.result).toContain('itself');
+        expect(pool.getTask(id)!.dependencies).toEqual([]);
     });
 });

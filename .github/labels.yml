@@ -2,10 +2,10 @@
   color: d73a4a
   description: Something isn't working
 - name: ci
-  color: 8FDAD8
+  color: 6e7781
   description: Changes to CI/CD workflows
 - name: dependencies
-  color: D5142B
+  color: d4a72c
   description: Dependency updates
 - name: documentation
   color: 0075ca
@@ -14,7 +14,7 @@
   color: cfd3d7
   description: This issue or pull request already exists
 - name: enhancement
-  color: a2eeef
+  color: 1a7f37
   description: New feature or request
 - name: good first issue
   color: 7057ff
@@ -26,7 +26,7 @@
   color: e4e669
   description: This doesn't seem right
 - name: question
-  color: d876e3
+  color: bf3989
   description: Further information is requested
 - name: wontfix
   color: ffffff

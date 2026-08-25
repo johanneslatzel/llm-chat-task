@@ -62,11 +62,52 @@ describe('CreateTaskTool', () => {
         expect(result[0]!.status).toBe(ResultStatus.Success);
         const task = pool.getTasks()[0]!;
         expect(task.description).toBeUndefined();
-        expect(task.priority).toBeUndefined();
+        expect(task.priority).toBe('low');
         expect(task.type).toBeUndefined();
         expect(task.acceptanceCriteria).toBeUndefined();
         expect(task.links).toBeUndefined();
         expect(task.steps).toBeUndefined();
+    });
+
+    it('creates a task with a milestone', async () => {
+        const pool = new TaskPool();
+        const tool = new CreateTaskTool(pool);
+        const result = await tool.execute({ title: 'Ship SDK', milestone: '  v2-release  ' });
+        expect(result[0]!.status).toBe(ResultStatus.Success);
+        expect(pool.getTasks()[0]!.milestone).toBe('v2-release');
+    });
+
+    it('stores no milestone when an empty string is passed at creation', async () => {
+        const pool = new TaskPool();
+        const tool = new CreateTaskTool(pool);
+        const result = await tool.execute({ title: 'Task A', milestone: '' });
+        expect(result[0]!.status).toBe(ResultStatus.Success);
+        expect(pool.getTasks()[0]!.milestone).toBeUndefined();
+    });
+
+    it('surfaces pool validation errors for an over-long milestone', async () => {
+        const tool = new CreateTaskTool(new TaskPool());
+        const overLong = await tool.execute({ title: 'Task', milestone: 'm'.repeat(65) });
+        expect(overLong[0]!.status).toBe(ResultStatus.Error);
+        expect(overLong[0]!.result).toContain('Milestone must be at most 64 characters');
+    });
+
+    it('surfaces pool validation errors for milestones with whitespace or non-ASCII', async () => {
+        const tool = new CreateTaskTool(new TaskPool());
+        const spaced = await tool.execute({ title: 'Task', milestone: 'has space' });
+        expect(spaced[0]!.status).toBe(ResultStatus.Error);
+        expect(spaced[0]!.result).toContain('Milestone must not contain whitespace');
+        const nonAscii = await tool.execute({ title: 'Task', milestone: 'café' });
+        expect(nonAscii[0]!.status).toBe(ResultStatus.Error);
+        expect(nonAscii[0]!.result).toContain('Milestone must contain only ASCII characters');
+    });
+
+    it('ignores a non-string milestone at creation', async () => {
+        const pool = new TaskPool();
+        const tool = new CreateTaskTool(pool);
+        const result = await tool.execute({ title: 'Task', milestone: 42 });
+        expect(result[0]!.status).toBe(ResultStatus.Success);
+        expect(pool.getTasks()[0]!.milestone).toBeUndefined();
     });
 
     it('reports missing title', async () => {

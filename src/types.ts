@@ -3,7 +3,7 @@ import { UUID } from 'crypto';
 /** Lifecycle status of a task. `pending` and `ready` are derived from dependencies. */
 export type TaskStatus = 'pending' | 'ready' | 'in_progress' | 'done';
 
-/** Stated importance of a task. Absent means no urgency was recorded. */
+/** Stated importance of a task. Newly created tasks default to `low`; absence only occurs on tasks loaded from files stored before the default existed. */
 export type TaskPriority = 'low' | 'medium' | 'high';
 
 /** Kind of work a task represents. */
@@ -22,6 +22,11 @@ export type Task = {
     description?: string;
     /** Testable definition of done (checklist items or Given/When/Then scenarios). */
     acceptanceCriteria?: string[];
+    /**
+     * Optional identifier-style grouping label tying this task to a milestone
+     * (e.g. "spiel-sdk-migration"): printable ASCII without whitespace.
+     */
+    milestone?: string;
     priority?: TaskPriority;
     type?: TaskType;
     /** Reference URLs (docs, issues, designs). */

@@ -5,8 +5,11 @@ import {
     ToolParameterProperty,
     ToolParameters
 } from '@johannes.latzel/llm-chat';
+import { MIN_ID_PREFIX_LENGTH } from '../constants.js';
+import { applyStructuredFields } from '../lib/fields.js';
+import { resolveExactOrError } from '../lib/id-resolution.js';
 import { TaskPool, UpdateTaskInput } from '../pool.js';
-import type { TaskPriority, TaskStatus, TaskType } from '../types.js';
+import type { TaskStatus } from '../types.js';
 
 const SETTABLE_STATUSES: readonly TaskStatus[] = ['ready', 'in_progress', 'done'];
 
@@ -20,13 +23,18 @@ export class UpdateTaskTool extends Tool {
             'Use this tool to update a task: set its status (ready, in_progress or done), refine its ' +
                 'title or any structured plan field, append a timestamped entry to its progress log, ' +
                 'or add a dependency on another task. Status and dependency_id are mutually exclusive. ' +
-                'When marking a task done, record a short summary of what was completed in history so ' +
-                'the result is not lost. Array fields (acceptance_criteria, steps, constraints, ' +
-                'out_of_scope, verification, context, edge_cases, links) replace the whole array. ' +
-                'To update a plan field, pass the complete new list.',
+                'Array fields replace the whole array; to update a plan field, pass the complete new ' +
+                'list. When marking a task done, record a short summary of what was completed in ' +
+                'history so the result is not lost. Shortened ids of at least ' +
+                MIN_ID_PREFIX_LENGTH +
+                ' characters are accepted for id and dependency_id when they match exactly one task.',
             new ToolParameters(
                 {
-                    id: ToolParameterProperty.string('The id of the task to update'),
+                    id: ToolParameterProperty.string(
+                        'The id of the task to update; a shortened id of at least ' +
+                            MIN_ID_PREFIX_LENGTH +
+                            ' characters resolves when unique'
+                    ),
                     status: ToolParameterProperty.string(
                         'The new status: ready, in_progress or done. pending is derived automatically.'
                     ),
@@ -47,6 +55,12 @@ export class UpdateTaskTool extends Tool {
                         'New description. Must be non-empty and at most ' +
                             pool.config.maxDescriptionLength +
                             ' characters.'
+                    ),
+                    milestone: ToolParameterProperty.string(
+                        'New identifier-style milestone label: printable ASCII without whitespace, ' +
+                            'at most ' +
+                            pool.config.maxMilestoneLength +
+                            ' characters. Pass an empty string to clear the milestone.'
                     ),
                     acceptance_criteria: ToolParameterProperty.array(
                         'New acceptance criteria list. Replaces the whole array. At most ' +
@@ -147,15 +161,31 @@ export class UpdateTaskTool extends Tool {
                 status: ResultStatus.Error
             };
         }
+        const idResolution = resolveExactOrError(this.pool, args.id);
+        if (!idResolution.ok) {
+            return idResolution.error;
+        }
+        const resolvedId = idResolution.task.id;
+        let resolvedDependencyId: string | undefined;
+        if (dependencyId !== undefined) {
+            const depResolution = resolveExactOrError(this.pool, dependencyId);
+            if (!depResolution.ok) {
+                return depResolution.error;
+            }
+            resolvedDependencyId = depResolution.task.id;
+        }
         try {
-            const changes = this.toUpdateTaskInput(args, status, dependencyId);
-            const task = await this.pool.updateTask(args.id, changes);
-            const parts = ['Task updated with id: ' + args.id + ', status: ' + task.status];
+            const changes = this.toUpdateTaskInput(args, status, resolvedDependencyId);
+            const task = await this.pool.updateTask(resolvedId, changes);
+            const parts = ['Task updated with id: ' + resolvedId + ', status: ' + task.status];
             if (changes.title !== undefined) {
                 parts.push('title updated');
             }
             if (changes.description !== undefined) {
                 parts.push('description updated');
+            }
+            if (changes.milestone !== undefined) {
+                parts.push('milestone updated');
             }
             if (changes.acceptanceCriteria !== undefined) {
                 parts.push('acceptance criteria updated');
@@ -217,39 +247,7 @@ export class UpdateTaskTool extends Tool {
         if (typeof args.title === 'string') {
             changes.title = args.title;
         }
-        if (typeof args.description === 'string') {
-            changes.description = args.description;
-        }
-        if (Array.isArray(args.acceptance_criteria)) {
-            changes.acceptanceCriteria = args.acceptance_criteria as string[];
-        }
-        if (typeof args.priority === 'string') {
-            changes.priority = args.priority as TaskPriority;
-        }
-        if (typeof args.type === 'string') {
-            changes.type = args.type as TaskType;
-        }
-        if (Array.isArray(args.links)) {
-            changes.links = args.links as string[];
-        }
-        if (Array.isArray(args.steps)) {
-            changes.steps = args.steps as string[];
-        }
-        if (Array.isArray(args.context)) {
-            changes.context = args.context as string[];
-        }
-        if (Array.isArray(args.constraints)) {
-            changes.constraints = args.constraints as string[];
-        }
-        if (Array.isArray(args.out_of_scope)) {
-            changes.outOfScope = args.out_of_scope as string[];
-        }
-        if (Array.isArray(args.verification)) {
-            changes.verification = args.verification as string[];
-        }
-        if (Array.isArray(args.edge_cases)) {
-            changes.edgeCases = args.edge_cases as string[];
-        }
+        applyStructuredFields(args, changes);
         return changes;
     }
 

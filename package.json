@@ -1,6 +1,6 @@
 {
     "name": "@johannes.latzel/llm-chat-task",
-    "version": "0.1.0",
+    "version": "0.2.0",
     "description": "Task pool and task management tools for the llm-chat ecosystem",
     "license": "MIT",
     "files": [
@@ -43,7 +43,7 @@
         "prebuild": "rm -rf dist/",
         "prepack": "npm run build",
         "build": "tsc -p tsconfig.build.json",
-        "verify": "tsc --noEmit && eslint . --max-warnings 0 && vitest run --coverage",
+        "verify": "tsc --noEmit && eslint . --max-warnings 0 && npm run check:lines && vitest run --coverage",
         "audit": "npm audit --audit-level=high",
         "lint": "eslint . --max-warnings 0",
         "format": "prettier --write 'docs/**/*.md' 'src/**/*.ts' 'tests/**/*.ts'",
@@ -52,7 +52,8 @@
         "test:coverage": "vitest run --coverage",
         "clean:pack": "rm -rf node_modules dist/ package-lock.json && npm cache clean --force && npm install && npm run verify && npm run build && npm pack",
         "clean:install": "rm -rf node_modules dist/ package-lock.json && npm cache clean --force && npm install && npm run verify",
-        "prepare": "husky"
+        "prepare": "husky",
+        "check:lines": "check-line-limits"
     },
     "lint-staged": {
         "src/**/*.ts": [
@@ -78,6 +79,7 @@
         "lint-staged": "^17.3.0",
         "prettier": "^3.5.3",
         "typescript": "^6.0.3",
-        "vitest": "^4.1.8"
+        "vitest": "^4.1.8",
+        "@johannes.latzel/check-line-limits": "^1.0.1"
     }
 }

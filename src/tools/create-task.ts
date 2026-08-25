@@ -5,8 +5,8 @@ import {
     ToolParameterProperty,
     ToolParameters
 } from '@johannes.latzel/llm-chat';
+import { applyStructuredFields } from '../lib/fields.js';
 import { CreateTaskInput, TaskPool } from '../pool.js';
-import type { TaskPriority, TaskType } from '../types.js';
 
 /** Creates a task with a structured description, acceptance criteria, and an embedded plan. */
 export class CreateTaskTool extends Tool {
@@ -16,33 +16,9 @@ export class CreateTaskTool extends Tool {
         super(
             'create_task',
             'Use this tool to create a new task that needs to be accomplished. A task carries a ' +
-                'concise title plus structured fields that together form a small plan for doing the work. ' +
-                'Fill every field that adds value: a vague task is not actionable.\n\n' +
-                '- title (required): a short, specific, imperative phrase, e.g. "Add phone validation to ' +
-                'UserService" (at most ' +
-                pool.config.maxTitleLength +
-                ' characters).\n' +
-                '- description: what to do and why. State the goal, and current vs expected behavior ' +
-                'where relevant. This is prose, not implementation steps.\n' +
-                '- acceptance_criteria: testable definition of done. Write each item so it has an ' +
-                'unambiguous pass/fail outcome; use Given/When/Then scenarios or a checklist. ' +
-                'At most ' +
-                pool.config.maxAcceptanceCriteriaCount +
-                ' items, each at most ' +
-                pool.config.maxAcceptanceCriteriaLength +
-                ' characters.\n' +
-                '- steps: the ordered execution plan, one concrete action per item.\n' +
-                '- context: relevant files, entry points, existing patterns, and architectural ' +
-                'decisions the executor cannot infer from the code alone.\n' +
-                '- constraints: rules that must hold, e.g. "No new dependencies" or "Match the ' +
-                'existing validation pattern". Include both must-do and must-not-do rules.\n' +
-                '- out_of_scope: work explicitly excluded so the executor does not over-reach.\n' +
-                '- verification: commands or checks that confirm the work is done, e.g. "npm run ' +
-                'verify" or a curl invocation.\n' +
-                '- edge_cases: known pitfalls, footguns, and edge conditions to watch for.\n' +
-                '- priority: stated importance (low, medium, high); omit when there is no urgency.\n' +
-                '- type: kind of work (feature, bug, refactor, chore, research).\n' +
-                '- links: reference URLs such as docs, issues, or designs.',
+                'concise title plus optional structured plan fields that together form a small plan ' +
+                'for doing the work. Fill every field that adds value: a vague task is not actionable. ' +
+                'See the parameter descriptions for the semantics and limits of each field.',
             new ToolParameters(
                 {
                     title: ToolParameterProperty.string(
@@ -54,6 +30,12 @@ export class CreateTaskTool extends Tool {
                         'What to do and why: the goal, including current vs expected behavior where relevant. At most ' +
                             pool.config.maxDescriptionLength +
                             ' characters.'
+                    ),
+                    milestone: ToolParameterProperty.string(
+                        'Optional identifier-style grouping label tying the task to a milestone, e.g. ' +
+                            'release-2026-q3. Printable ASCII without whitespace, at most ' +
+                            pool.config.maxMilestoneLength +
+                            ' characters; an empty or whitespace-only value stores no milestone.'
                     ),
                     acceptance_criteria: ToolParameterProperty.array(
                         'Testable definition of done. Each item must have an unambiguous pass/fail outcome; use Given/When/Then scenarios or a checklist. At most ' +
@@ -105,7 +87,7 @@ export class CreateTaskTool extends Tool {
                             ' characters.'
                     ),
                     priority: ToolParameterProperty.string(
-                        'Stated importance: low, medium or high. Omit when there is no urgency.'
+                        'Stated importance: low, medium or high. Defaults to low when omitted.'
                     ),
                     type: ToolParameterProperty.string(
                         'Kind of work: feature, bug, refactor, chore or research.'
@@ -143,39 +125,7 @@ export class CreateTaskTool extends Tool {
 
     private toCreateTaskInput(args: Record<string, unknown>): CreateTaskInput {
         const input: CreateTaskInput = { title: args.title as string };
-        if (typeof args.description === 'string') {
-            input.description = args.description;
-        }
-        if (Array.isArray(args.acceptance_criteria)) {
-            input.acceptanceCriteria = args.acceptance_criteria as string[];
-        }
-        if (typeof args.priority === 'string') {
-            input.priority = args.priority as TaskPriority;
-        }
-        if (typeof args.type === 'string') {
-            input.type = args.type as TaskType;
-        }
-        if (Array.isArray(args.links)) {
-            input.links = args.links as string[];
-        }
-        if (Array.isArray(args.steps)) {
-            input.steps = args.steps as string[];
-        }
-        if (Array.isArray(args.context)) {
-            input.context = args.context as string[];
-        }
-        if (Array.isArray(args.constraints)) {
-            input.constraints = args.constraints as string[];
-        }
-        if (Array.isArray(args.out_of_scope)) {
-            input.outOfScope = args.out_of_scope as string[];
-        }
-        if (Array.isArray(args.verification)) {
-            input.verification = args.verification as string[];
-        }
-        if (Array.isArray(args.edge_cases)) {
-            input.edgeCases = args.edge_cases as string[];
-        }
+        applyStructuredFields(args, input);
         return input;
     }
 }

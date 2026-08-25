@@ -1,16 +1,31 @@
 import { readFile, writeFile } from 'node:fs/promises';
 import { Mutex } from 'async-mutex';
 import { randomUUID, UUID } from 'crypto';
+import { MIN_ID_PREFIX_LENGTH } from './constants.js';
+import { PLAN_FIELDS, PRIORITIES, STATUSES, TYPES } from './lib/fields.js';
 import { TaskConfiguration } from './lib/config.js';
 import { PlanField, Task, TaskPriority, TaskStatus, TaskType } from './types.js';
 
 export type { Task, TaskStatus, TaskPriority, TaskType, PlanField };
+
+/** Outcome of resolving a task id or id prefix via `TaskPool.resolveId`. */
+export type IdResolution =
+    | { kind: 'exact'; task: Task }
+    | { kind: 'prefix'; task: Task }
+    | { kind: 'ambiguous'; candidates: UUID[] }
+    | { kind: 'too-short' }
+    | { kind: 'not-found' };
 
 /** Input for creating a task via `TaskPool.createTask`. */
 export type CreateTaskInput = {
     title: string;
     description?: string;
     acceptanceCriteria?: string[];
+    /**
+     * Optional identifier-style grouping label: printable ASCII without
+     * whitespace; trimmed, empty/whitespace stores no milestone.
+     */
+    milestone?: string;
     priority?: TaskPriority;
     type?: TaskType;
     links?: string[];
@@ -30,6 +45,11 @@ export type UpdateTaskInput = {
     title?: string;
     description?: string;
     acceptanceCriteria?: string[];
+    /**
+     * New milestone label (printable ASCII, no whitespace).
+     * Empty or whitespace-only clears the task's milestone.
+     */
+    milestone?: string;
     priority?: TaskPriority;
     type?: TaskType;
     links?: string[];
@@ -47,6 +67,7 @@ type TaskFile = {
         title: string;
         description?: string;
         acceptanceCriteria?: string[];
+        milestone?: string;
         priority?: TaskPriority;
         type?: TaskType;
         links?: string[];
@@ -62,33 +83,16 @@ type TaskFile = {
     }>;
 };
 
-const PRIORITIES: readonly TaskPriority[] = ['low', 'medium', 'high'];
-const TYPES: readonly TaskType[] = ['feature', 'bug', 'refactor', 'chore', 'research'];
-const PLAN_FIELDS: readonly PlanField[] = [
-    'steps',
-    'constraints',
-    'outOfScope',
-    'verification',
-    'context',
-    'edgeCases'
-];
-
 function isTaskStatus(value: unknown): value is TaskStatus {
-    return value === 'pending' || value === 'ready' || value === 'in_progress' || value === 'done';
+    return (STATUSES as readonly unknown[]).includes(value);
 }
 
 function isTaskPriority(value: unknown): value is TaskPriority {
-    return value === 'low' || value === 'medium' || value === 'high';
+    return (PRIORITIES as readonly unknown[]).includes(value);
 }
 
 function isTaskType(value: unknown): value is TaskType {
-    return (
-        value === 'feature' ||
-        value === 'bug' ||
-        value === 'refactor' ||
-        value === 'chore' ||
-        value === 'research'
-    );
+    return (TYPES as readonly unknown[]).includes(value);
 }
 
 function normalizeText(text: string): string {
@@ -172,6 +176,29 @@ function validateDescription(value: unknown, maxLength: number): void {
     validateMaxLength(description, maxLength, 'Description');
 }
 
+/**
+ * Validates a milestone value: `undefined` is ignored; empty or whitespace-only
+ * is valid and means "no milestone" (clearing on update); otherwise the trimmed
+ * value must contain no whitespace characters, consist of printable ASCII only
+ * (code points 0x20-0x7E) and be at most `maxLength` characters long.
+ */
+function validateMilestone(value: unknown, maxLength: number): void {
+    if (value === undefined) {
+        return;
+    }
+    if (typeof value !== 'string') {
+        throw new Error('Milestone must be a string');
+    }
+    const milestone = normalizeText(value);
+    if (/\s/.test(milestone)) {
+        throw new Error('Milestone must not contain whitespace');
+    }
+    if (/[^\x20-\x7E]/.test(milestone)) {
+        throw new Error('Milestone must contain only ASCII characters');
+    }
+    validateMaxLength(milestone, maxLength, 'Milestone');
+}
+
 function validatePriority(value: unknown): void {
     if (value !== undefined && !isTaskPriority(value)) {
         throw new Error(
@@ -190,6 +217,7 @@ function validateType(value: unknown): void {
 type StructuredInput = {
     title: string;
     description?: string | undefined;
+    milestone?: string | undefined;
     acceptanceCriteria?: string[] | undefined;
     priority?: TaskPriority | undefined;
     type?: TaskType | undefined;
@@ -207,6 +235,7 @@ function validateStructuredInput(input: StructuredInput, config: TaskConfigurati
     const title = normalizeText(input.title);
     validateTitle(title, config.maxTitleLength);
     validateDescription(input.description, config.maxDescriptionLength);
+    validateMilestone(input.milestone, config.maxMilestoneLength);
     validateTextList(
         input.acceptanceCriteria,
         config.maxAcceptanceCriteriaCount,
@@ -240,6 +269,49 @@ function formatLogEntry(entry: string): string {
     return '[' + new Date().toISOString() + '] ' + entry;
 }
 
+/** Optional structured fields that can be copied from a source onto a task. */
+type FieldSource = Pick<
+    CreateTaskInput,
+    'description' | 'milestone' | 'priority' | 'type' | 'acceptanceCriteria' | 'links' | PlanField
+>;
+
+/** Copies the optional string-array fields from a source onto a task, normalizing each item. */
+function copyNormalizedArrays(source: FieldSource, target: Task): void {
+    if (source.acceptanceCriteria !== undefined) {
+        target.acceptanceCriteria = source.acceptanceCriteria.map(normalizeText);
+    }
+    if (source.links !== undefined) {
+        target.links = source.links.map(normalizeText);
+    }
+    for (const field of PLAN_FIELDS) {
+        if (source[field] !== undefined) {
+            target[field] = source[field].map(normalizeText);
+        }
+    }
+}
+
+/** Copies the optional structured fields from a source onto a task, normalizing text fields. */
+function copyStructuredFields(source: FieldSource, target: Task): void {
+    if (source.description !== undefined) {
+        target.description = normalizeText(source.description);
+    }
+    if (source.milestone !== undefined) {
+        const milestone = normalizeText(source.milestone);
+        if (milestone === '') {
+            delete target.milestone;
+        } else {
+            target.milestone = milestone;
+        }
+    }
+    if (source.priority !== undefined) {
+        target.priority = source.priority;
+    }
+    if (source.type !== undefined) {
+        target.type = source.type;
+    }
+    copyNormalizedArrays(source, target);
+}
+
 /** In-memory task pool with dependency tracking and optional file persistence. */
 export class TaskPool {
     /** Limits enforced by this pool; fixed at construction. */
@@ -262,25 +334,9 @@ export class TaskPool {
             history: '',
             dependencies: []
         };
-        if (input.description !== undefined) {
-            task.description = normalizeText(input.description);
-        }
-        if (input.acceptanceCriteria !== undefined) {
-            task.acceptanceCriteria = input.acceptanceCriteria.map(normalizeText);
-        }
-        if (input.priority !== undefined) {
-            task.priority = input.priority;
-        }
-        if (input.type !== undefined) {
-            task.type = input.type;
-        }
-        if (input.links !== undefined) {
-            task.links = input.links.map(normalizeText);
-        }
-        for (const field of PLAN_FIELDS) {
-            if (input[field] !== undefined) {
-                task[field] = input[field].map(normalizeText);
-            }
+        copyStructuredFields(input, task);
+        if (input.priority === undefined) {
+            task.priority = 'low';
         }
         await this.mutex.runExclusive(() => {
             this.tasks[task.id] = task;
@@ -291,6 +347,36 @@ export class TaskPool {
     /** Returns a task by id, or `undefined` when it does not exist. */
     getTask(id: string): Task | undefined {
         return this.tasks[id];
+    }
+
+    /**
+     * Resolves a full task id or a shortened prefix of one. An exact id match
+     * always wins, even for inputs shorter than {@link MIN_ID_PREFIX_LENGTH}.
+     * Otherwise input of at least {@link MIN_ID_PREFIX_LENGTH} characters is
+     * matched case-insensitively against the canonical ids: a unique match is
+     * returned as `prefix`, several matches as `ambiguous` with all candidate
+     * ids (in insertion order), and no match as `not-found`. Shorter input
+     * yields `too-short`.
+     */
+    resolveId(idOrPrefix: string): IdResolution {
+        const input = idOrPrefix.trim().toLowerCase();
+        const exact = this.tasks[input];
+        if (exact) {
+            return { kind: 'exact', task: exact };
+        }
+        if (input.length < MIN_ID_PREFIX_LENGTH) {
+            return { kind: 'too-short' };
+        }
+        const candidates = Object.values(this.tasks)
+            .filter((t) => t.id.startsWith(input))
+            .map((t) => t.id);
+        if (candidates.length === 1) {
+            return { kind: 'prefix', task: this.tasks[candidates[0]!]! };
+        }
+        if (candidates.length > 1) {
+            return { kind: 'ambiguous', candidates };
+        }
+        return { kind: 'not-found' };
     }
 
     /** Returns all tasks. */
@@ -334,19 +420,17 @@ export class TaskPool {
             throw new Error('Cannot update task: status and addDependency are mutually exclusive');
         }
         await this.mutex.runExclusive(() => {
-            const updated: Record<string, unknown> = {};
-            if (changes.title !== undefined) {
-                updated.title = normalizeText(changes.title);
-            }
-            if (changes.description !== undefined) {
-                updated.description = normalizeText(changes.description);
-            }
             const merged: CreateTaskInput = {
                 title: changes.title !== undefined ? normalizeText(changes.title) : task.title
             };
             if (changes.description !== undefined || task.description !== undefined) {
                 merged.description = (
                     changes.description !== undefined ? changes.description : task.description
+                )!;
+            }
+            if (changes.milestone !== undefined || task.milestone !== undefined) {
+                merged.milestone = (
+                    changes.milestone !== undefined ? changes.milestone : task.milestone
                 )!;
             }
             if (changes.acceptanceCriteria !== undefined || task.acceptanceCriteria !== undefined) {
@@ -395,7 +479,7 @@ export class TaskPool {
             if (changes.addDependency !== undefined) {
                 this.assertCanAddDependency(task, changes.addDependency);
             }
-            this.applyFieldChanges(task, changes, updated);
+            this.applyFieldChanges(task, changes);
             if (logEntry !== undefined) {
                 task.history = task.history ? task.history + '\n' + logEntry : logEntry;
             }
@@ -432,6 +516,7 @@ export class TaskPool {
                 id: t.id,
                 title: t.title,
                 description: t.description,
+                milestone: t.milestone,
                 acceptanceCriteria: t.acceptanceCriteria,
                 priority: t.priority,
                 type: t.type,
@@ -473,6 +558,7 @@ export class TaskPool {
                 {
                     title: t.title,
                     description: t.description,
+                    milestone: t.milestone,
                     acceptanceCriteria: t.acceptanceCriteria,
                     priority: t.priority,
                     type: t.type,
@@ -500,26 +586,7 @@ export class TaskPool {
                 status: t.status,
                 dependencies: []
             };
-            if (t.description !== undefined) {
-                task.description = normalizeText(t.description);
-            }
-            if (t.acceptanceCriteria !== undefined) {
-                task.acceptanceCriteria = t.acceptanceCriteria.map(normalizeText);
-            }
-            if (t.priority !== undefined) {
-                task.priority = t.priority;
-            }
-            if (t.type !== undefined) {
-                task.type = t.type;
-            }
-            if (t.links !== undefined) {
-                task.links = t.links.map(normalizeText);
-            }
-            for (const field of PLAN_FIELDS) {
-                if (t[field] !== undefined) {
-                    task[field] = t[field].map(normalizeText);
-                }
-            }
+            copyStructuredFields(t, task);
             byId[task.id] = task;
             this.tasks[task.id] = task;
         }
@@ -533,34 +600,11 @@ export class TaskPool {
         }
     }
 
-    private applyFieldChanges(
-        task: Task,
-        changes: UpdateTaskInput,
-        normalized: Record<string, unknown>
-    ): void {
+    private applyFieldChanges(task: Task, changes: UpdateTaskInput): void {
         if (changes.title !== undefined) {
-            task.title = normalized.title as string;
+            task.title = normalizeText(changes.title);
         }
-        if (changes.description !== undefined) {
-            task.description = normalized.description as string;
-        }
-        if (changes.acceptanceCriteria !== undefined) {
-            task.acceptanceCriteria = changes.acceptanceCriteria.map(normalizeText);
-        }
-        if (changes.priority !== undefined) {
-            task.priority = changes.priority;
-        }
-        if (changes.type !== undefined) {
-            task.type = changes.type;
-        }
-        if (changes.links !== undefined) {
-            task.links = changes.links.map(normalizeText);
-        }
-        for (const field of PLAN_FIELDS) {
-            if (changes[field] !== undefined) {
-                task[field] = changes[field].map(normalizeText);
-            }
-        }
+        copyStructuredFields(changes, task);
     }
 
     private assertCanAddDependency(task: Task, dependsOnId: string): void {

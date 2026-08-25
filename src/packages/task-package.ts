@@ -42,23 +42,13 @@ Structured plan fields (all optional except title):
 - out_of_scope - explicitly excluded work
 - verification - commands or checks that confirm the work is done
 - edge_cases - known pitfalls and edge conditions
-- priority - low, medium or high
+- milestone - optional ascii label without whitespace, e.g. release-2026-q3 (empty clears it)
+- priority - low, medium or high (new tasks default to low)
 - type - feature, bug, refactor, chore or research
 - links - reference URLs
 
-Workflow:
-
-1. create_task with a title and the plan fields that add value - returns a task id.
-2. update_task(id, dependency_id) - order tasks. A task with an unfinished
-   dependency becomes pending and can't be marked done.
-3. update_task(id, status: in_progress) - start working on a task.
-4. update_task(id, status: done, history: "...") - finish it, recording the outcome.
-5. update_task(id, title|description|steps|...) - refine any structured field.
-6. read_task(available: true) - list tasks that can be worked on right now.
-7. read_task(status|priority|type) - filter listings by those fields.
-8. read_task(id) - read a single task, including its full plan and progress log.
-9. read_task() - list all tasks that are not done.
-
-Tasks never throw: errors are returned as result strings.`;
+Manage tasks with the create_task, read_task and update_task tools; read_task
+filters listings by status, priority, type and milestone. Tasks never
+throw: errors are returned as result strings.`;
     }
 }
