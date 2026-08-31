@@ -4,7 +4,7 @@ import { ResultStatus } from '@johannes.latzel/llm-chat';
 
 describe('CreateTaskTool', () => {
     it('creates a task and returns its id', async () => {
-        const pool = new TaskPool();
+        const pool = await TaskPool.create();
         const tool = new CreateTaskTool(pool);
         const result = await tool.execute({ title: 'New task' });
         expect(result[0]!.status).toBe(ResultStatus.Success);
@@ -15,7 +15,7 @@ describe('CreateTaskTool', () => {
     });
 
     it('creates a fully structured task', async () => {
-        const pool = new TaskPool();
+        const pool = await TaskPool.create();
         const tool = new CreateTaskTool(pool);
         const result = await tool.execute({
             title: 'Add validation',
@@ -48,7 +48,7 @@ describe('CreateTaskTool', () => {
     });
 
     it('ignores non-string optional scalars and non-array arrays', async () => {
-        const pool = new TaskPool();
+        const pool = await TaskPool.create();
         const tool = new CreateTaskTool(pool);
         const result = await tool.execute({
             title: 'Task',
@@ -70,7 +70,7 @@ describe('CreateTaskTool', () => {
     });
 
     it('creates a task with a milestone', async () => {
-        const pool = new TaskPool();
+        const pool = await TaskPool.create();
         const tool = new CreateTaskTool(pool);
         const result = await tool.execute({ title: 'Ship SDK', milestone: '  v2-release  ' });
         expect(result[0]!.status).toBe(ResultStatus.Success);
@@ -78,7 +78,7 @@ describe('CreateTaskTool', () => {
     });
 
     it('stores no milestone when an empty string is passed at creation', async () => {
-        const pool = new TaskPool();
+        const pool = await TaskPool.create();
         const tool = new CreateTaskTool(pool);
         const result = await tool.execute({ title: 'Task A', milestone: '' });
         expect(result[0]!.status).toBe(ResultStatus.Success);
@@ -86,14 +86,14 @@ describe('CreateTaskTool', () => {
     });
 
     it('surfaces pool validation errors for an over-long milestone', async () => {
-        const tool = new CreateTaskTool(new TaskPool());
+        const tool = new CreateTaskTool(await TaskPool.create());
         const overLong = await tool.execute({ title: 'Task', milestone: 'm'.repeat(65) });
         expect(overLong[0]!.status).toBe(ResultStatus.Error);
         expect(overLong[0]!.result).toContain('Milestone must be at most 64 characters');
     });
 
     it('surfaces pool validation errors for milestones with whitespace or non-ASCII', async () => {
-        const tool = new CreateTaskTool(new TaskPool());
+        const tool = new CreateTaskTool(await TaskPool.create());
         const spaced = await tool.execute({ title: 'Task', milestone: 'has space' });
         expect(spaced[0]!.status).toBe(ResultStatus.Error);
         expect(spaced[0]!.result).toContain('Milestone must not contain whitespace');
@@ -103,7 +103,7 @@ describe('CreateTaskTool', () => {
     });
 
     it('ignores a non-string milestone at creation', async () => {
-        const pool = new TaskPool();
+        const pool = await TaskPool.create();
         const tool = new CreateTaskTool(pool);
         const result = await tool.execute({ title: 'Task', milestone: 42 });
         expect(result[0]!.status).toBe(ResultStatus.Success);
@@ -111,21 +111,21 @@ describe('CreateTaskTool', () => {
     });
 
     it('reports missing title', async () => {
-        const tool = new CreateTaskTool(new TaskPool());
+        const tool = new CreateTaskTool(await TaskPool.create());
         const result = await tool.execute({});
         expect(result[0]!.status).toBe(ResultStatus.Error);
         expect(result[0]!.result).toContain('title');
     });
 
     it('reports non-string title', async () => {
-        const tool = new CreateTaskTool(new TaskPool());
+        const tool = new CreateTaskTool(await TaskPool.create());
         const result = await tool.execute({ title: 42 });
         expect(result[0]!.status).toBe(ResultStatus.Error);
         expect(result[0]!.result).toContain('title');
     });
 
     it('handles pool error in createTask', async () => {
-        const pool = new TaskPool();
+        const pool = await TaskPool.create();
         vi.spyOn(pool, 'createTask').mockRejectedValueOnce(new Error('pool failure'));
         const tool = new CreateTaskTool(pool);
         const result = await tool.execute({ title: 'test' });
@@ -134,21 +134,21 @@ describe('CreateTaskTool', () => {
     });
 
     it('reports an empty title', async () => {
-        const tool = new CreateTaskTool(new TaskPool());
+        const tool = new CreateTaskTool(await TaskPool.create());
         const result = await tool.execute({ title: '   ' });
         expect(result[0]!.status).toBe(ResultStatus.Error);
         expect(result[0]!.result).toContain('Title must not be empty');
     });
 
     it('reports an over-long title', async () => {
-        const tool = new CreateTaskTool(new TaskPool());
+        const tool = new CreateTaskTool(await TaskPool.create());
         const result = await tool.execute({ title: 'x'.repeat(101) });
         expect(result[0]!.status).toBe(ResultStatus.Error);
         expect(result[0]!.result).toContain('Title must be at most 100 characters');
     });
 
     it('surfaces pool validation errors for structured fields', async () => {
-        const tool = new CreateTaskTool(new TaskPool());
+        const tool = new CreateTaskTool(await TaskPool.create());
         const badUrl = await tool.execute({ title: 'Task', links: ['not-a-url'] });
         expect(badUrl[0]!.status).toBe(ResultStatus.Error);
         expect(badUrl[0]!.result).toContain('Links items must be valid URLs');

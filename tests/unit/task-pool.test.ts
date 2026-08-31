@@ -5,8 +5,8 @@ import { TaskPool, TaskConfiguration } from '../../src/index.js';
 describe('TaskPool', () => {
     let pool: TaskPool;
 
-    beforeEach(() => {
-        pool = new TaskPool();
+    beforeEach(async () => {
+        pool = await TaskPool.create();
     });
 
     it('creates a task and returns its id', async () => {
@@ -91,15 +91,15 @@ describe('TaskPool', () => {
     });
 
     it('createTask rejects a non-string milestone', async () => {
-        await expect(
-            pool.createTask({ title: 'Task A', milestone: 42 } as never)
-        ).rejects.toThrow('Milestone must be a string');
+        await expect(pool.createTask({ title: 'Task A', milestone: 42 } as never)).rejects.toThrow(
+            'Milestone must be a string'
+        );
     });
 
     it('createTask rejects milestones containing internal whitespace', async () => {
-        await expect(
-            pool.createTask({ title: 'Task A', milestone: 'has space' })
-        ).rejects.toThrow('Milestone must not contain whitespace');
+        await expect(pool.createTask({ title: 'Task A', milestone: 'has space' })).rejects.toThrow(
+            'Milestone must not contain whitespace'
+        );
         await expect(
             pool.createTask({ title: 'Task A', milestone: 'tab\tinside' })
         ).rejects.toThrow('Milestone must not contain whitespace');
@@ -113,9 +113,9 @@ describe('TaskPool', () => {
         await expect(pool.createTask({ title: 'Task A', milestone: 'café' })).rejects.toThrow(
             'Milestone must contain only ASCII characters'
         );
-        await expect(
-            pool.createTask({ title: 'Task A', milestone: '🚀-launch' })
-        ).rejects.toThrow('Milestone must contain only ASCII characters');
+        await expect(pool.createTask({ title: 'Task A', milestone: '🚀-launch' })).rejects.toThrow(
+            'Milestone must contain only ASCII characters'
+        );
         expect(pool.getTasks()).toHaveLength(0);
     });
 
@@ -129,7 +129,10 @@ describe('TaskPool', () => {
 
     it('createTask rejects too many acceptance criteria', async () => {
         await expect(
-            pool.createTask({ title: 'Task A', acceptanceCriteria: Array.from({ length: 11 }, () => 'c') })
+            pool.createTask({
+                title: 'Task A',
+                acceptanceCriteria: Array.from({ length: 11 }, () => 'c')
+            })
         ).rejects.toThrow('Acceptance criteria must have at most 10 items');
     });
 
@@ -180,9 +183,7 @@ describe('TaskPool', () => {
     });
 
     it('createTask rejects an invalid type', async () => {
-        await expect(
-            pool.createTask({ title: 'Task A', type: 'epic' } as never)
-        ).rejects.toThrow(
+        await expect(pool.createTask({ title: 'Task A', type: 'epic' } as never)).rejects.toThrow(
             "Invalid type 'epic'. Allowed values: feature, bug, refactor, chore, research"
         );
     });
@@ -196,9 +197,9 @@ describe('TaskPool', () => {
     });
 
     it('createTask rejects an invalid link URL', async () => {
-        await expect(
-            pool.createTask({ title: 'Task A', links: ['not-a-url'] })
-        ).rejects.toThrow('Links items must be valid URLs');
+        await expect(pool.createTask({ title: 'Task A', links: ['not-a-url'] })).rejects.toThrow(
+            'Links items must be valid URLs'
+        );
     });
 
     it('createTask rejects too many links', async () => {
@@ -209,15 +210,15 @@ describe('TaskPool', () => {
     });
 
     it('createTask rejects non-string and empty links', async () => {
-        await expect(
-            pool.createTask({ title: 'Task A', links: [42] } as never)
-        ).rejects.toThrow('Links items must be strings');
-        await expect(
-            pool.createTask({ title: 'Task A', links: ['  '] })
-        ).rejects.toThrow('Links items must not be empty');
-        await expect(
-            pool.createTask({ title: 'Task A', links: 'nope' } as never)
-        ).rejects.toThrow('Links must be an array of strings');
+        await expect(pool.createTask({ title: 'Task A', links: [42] } as never)).rejects.toThrow(
+            'Links items must be strings'
+        );
+        await expect(pool.createTask({ title: 'Task A', links: ['  '] })).rejects.toThrow(
+            'Links items must not be empty'
+        );
+        await expect(pool.createTask({ title: 'Task A', links: 'nope' } as never)).rejects.toThrow(
+            'Links must be an array of strings'
+        );
     });
 
     it('createTask stores the plan arrays', async () => {
@@ -252,15 +253,15 @@ describe('TaskPool', () => {
         await expect(
             pool.createTask({ title: 'Task A', constraints: ['c'.repeat(301)] })
         ).rejects.toThrow('Constraints items must be at most 300 characters');
-        await expect(
-            pool.createTask({ title: 'Task A', outOfScope: [' '] })
-        ).rejects.toThrow('Out of scope items must not be empty');
+        await expect(pool.createTask({ title: 'Task A', outOfScope: [' '] })).rejects.toThrow(
+            'Out of scope items must not be empty'
+        );
         await expect(
             pool.createTask({ title: 'Task A', verification: 'nope' } as never)
         ).rejects.toThrow('Verification must be an array of strings');
-        await expect(
-            pool.createTask({ title: 'Task A', context: [7] } as never)
-        ).rejects.toThrow('Context items must be strings');
+        await expect(pool.createTask({ title: 'Task A', context: [7] } as never)).rejects.toThrow(
+            'Context items must be strings'
+        );
     });
 
     it('getTask returns undefined for an unknown id', () => {
@@ -531,9 +532,9 @@ describe('TaskPool', () => {
 
     it('updateTask rejects a non-string milestone', async () => {
         const id = await pool.createTask({ title: 'Task A' });
-        await expect(
-            pool.updateTask(id, { milestone: 42 } as never)
-        ).rejects.toThrow('Milestone must be a string');
+        await expect(pool.updateTask(id, { milestone: 42 } as never)).rejects.toThrow(
+            'Milestone must be a string'
+        );
         expect(pool.getTask(id)!.milestone).toBeUndefined();
     });
 
@@ -591,9 +592,9 @@ describe('TaskPool', () => {
         const id = await pool.createTask({ title: 'Task A', links: ['https://old.example'] });
         await pool.updateTask(id, { links: ['https://new.example'] });
         expect(pool.getTask(id)!.links).toEqual(['https://new.example']);
-        await expect(
-            pool.updateTask(id, { links: ['not-a-url'] })
-        ).rejects.toThrow('Links items must be valid URLs');
+        await expect(pool.updateTask(id, { links: ['not-a-url'] })).rejects.toThrow(
+            'Links items must be valid URLs'
+        );
     });
 
     it('updateTask replaces plan arrays', async () => {
@@ -639,9 +640,9 @@ describe('TaskPool', () => {
 
     it('updateTask validates all changes before applying any', async () => {
         const id = await pool.createTask({ title: 'Task A' });
-        await expect(
-            pool.updateTask(id, { description: '  ', status: 'done' })
-        ).rejects.toThrow('Description must not be empty');
+        await expect(pool.updateTask(id, { description: '  ', status: 'done' })).rejects.toThrow(
+            'Description must not be empty'
+        );
         expect(pool.getTask(id)!.status).toBe('ready');
         await expect(
             pool.updateTask(id, { status: 'done', history: 'x'.repeat(10_001) })
@@ -702,7 +703,7 @@ describe('TaskPool', () => {
     it('clear removes all tasks', async () => {
         await pool.createTask({ title: 'Task A' });
         await pool.createTask({ title: 'Task B' });
-        pool.clear();
+        await pool.clear();
         expect(pool.getTasks()).toHaveLength(0);
         expect(pool.getAvailableTasks()).toHaveLength(0);
     });
@@ -723,7 +724,9 @@ describe('TaskPool', () => {
         const idB = await pool.createTask({ title: 'Task B' });
         const idC = await pool.createTask({ title: 'Task C' });
         await pool.updateTask(idB, { addDependency: idA });
-        pool.getTasks().find((t) => t.id === idB)!.dependencies.push('unknown-dep' as UUID);
+        pool.getTasks()
+            .find((t) => t.id === idB)!
+            .dependencies.push('unknown-dep' as UUID);
         await pool.updateTask(idC, { addDependency: idB });
         expect(pool.getTasks().find((t) => t.id === idC)!.dependencies).toEqual([idB]);
         await pool.updateTask(idA, { status: 'done' });
@@ -761,7 +764,7 @@ describe('TaskPool', () => {
     });
 
     it('enforces custom limits from a TaskConfiguration', async () => {
-        const custom = new TaskPool(
+        const custom = await TaskPool.create(
             new TaskConfiguration({
                 maxTitleLength: 10,
                 maxDescriptionLength: 50,
@@ -781,9 +784,9 @@ describe('TaskPool', () => {
         await expect(
             custom.createTask({ title: 'ok', description: 'y'.repeat(51) })
         ).rejects.toThrow('Description must be at most 50 characters');
-        await expect(
-            custom.createTask({ title: 'ok', milestone: 'm'.repeat(11) })
-        ).rejects.toThrow('Milestone must be at most 10 characters');
+        await expect(custom.createTask({ title: 'ok', milestone: 'm'.repeat(11) })).rejects.toThrow(
+            'Milestone must be at most 10 characters'
+        );
         await expect(
             custom.createTask({ title: 'ok', acceptanceCriteria: ['a', 'b', 'c'] })
         ).rejects.toThrow('Acceptance criteria must have at most 2 items');
@@ -807,5 +810,4 @@ describe('TaskPool', () => {
         expect(custom.config.maxHistoryLength).toBe(50);
         expect(custom.config.historyPreviewLength).toBe(5);
     });
-
 });

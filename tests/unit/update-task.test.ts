@@ -1,11 +1,16 @@
 import { describe, it, expect, vi } from 'vitest';
+import { mkdtemp, rm } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import { JsonFileStore } from '@johannes.latzel/json-file-store';
+import { TaskConfiguration } from '../../src/lib/config.js';
 import { TaskPool, UpdateTaskTool } from '../../src/index.js';
 import { ResultStatus } from '@johannes.latzel/llm-chat';
-import { createTempDir, removeTempDir, createTempFile } from '../index.js';
+import type { Task } from '../../src/types.js';
 
 describe('UpdateTaskTool', () => {
     it('sets the milestone and reports it', async () => {
-        const pool = new TaskPool();
+        const pool = await TaskPool.create();
         const id = await pool.createTask({ title: 'Task A' });
         const tool = new UpdateTaskTool(pool);
         const result = await tool.execute({ id, milestone: '  v2-release  ' });
@@ -15,7 +20,7 @@ describe('UpdateTaskTool', () => {
     });
 
     it('replaces an existing milestone', async () => {
-        const pool = new TaskPool();
+        const pool = await TaskPool.create();
         const id = await pool.createTask({ title: 'Task A', milestone: 'v1' });
         const tool = new UpdateTaskTool(pool);
         const result = await tool.execute({ id, milestone: 'v2' });
@@ -25,7 +30,7 @@ describe('UpdateTaskTool', () => {
     });
 
     it('clears the milestone with an empty string', async () => {
-        const pool = new TaskPool();
+        const pool = await TaskPool.create();
         const id = await pool.createTask({ title: 'Task A', milestone: 'v1' });
         const tool = new UpdateTaskTool(pool);
         const result = await tool.execute({ id, milestone: '' });
@@ -35,7 +40,7 @@ describe('UpdateTaskTool', () => {
     });
 
     it('clearing a missing milestone succeeds as a no-op', async () => {
-        const pool = new TaskPool();
+        const pool = await TaskPool.create();
         const id = await pool.createTask({ title: 'Task A' });
         const tool = new UpdateTaskTool(pool);
         const result = await tool.execute({ id, milestone: '   ' });
@@ -45,7 +50,7 @@ describe('UpdateTaskTool', () => {
     });
 
     it('surfaces pool errors for an invalid milestone', async () => {
-        const pool = new TaskPool();
+        const pool = await TaskPool.create();
         const id = await pool.createTask({ title: 'Task A' });
         const tool = new UpdateTaskTool(pool);
         const result = await tool.execute({ id, milestone: 'm'.repeat(65) });
@@ -60,21 +65,21 @@ describe('UpdateTaskTool', () => {
     });
 
     it('reports missing id', async () => {
-        const tool = new UpdateTaskTool(new TaskPool());
+        const tool = new UpdateTaskTool(await TaskPool.create());
         const result = await tool.execute({});
         expect(result[0]!.status).toBe(ResultStatus.Error);
         expect(result[0]!.result).toContain('id');
     });
 
     it('reports a non-string id', async () => {
-        const tool = new UpdateTaskTool(new TaskPool());
+        const tool = new UpdateTaskTool(await TaskPool.create());
         const result = await tool.execute({ id: 42 });
         expect(result[0]!.status).toBe(ResultStatus.Error);
         expect(result[0]!.result).toContain('id');
     });
 
     it('sets a task status', async () => {
-        const pool = new TaskPool();
+        const pool = await TaskPool.create();
         const id = await pool.createTask({ title: 'Task A' });
         const tool = new UpdateTaskTool(pool);
         const result = await tool.execute({ id, status: 'in_progress' });
@@ -84,7 +89,7 @@ describe('UpdateTaskTool', () => {
     });
 
     it('marks a task done with a progress entry', async () => {
-        const pool = new TaskPool();
+        const pool = await TaskPool.create();
         const id = await pool.createTask({ title: 'Task A' });
         const tool = new UpdateTaskTool(pool);
         const result = await tool.execute({ id, status: 'done', history: 'all done' });
@@ -97,7 +102,7 @@ describe('UpdateTaskTool', () => {
     });
 
     it('updates a task title', async () => {
-        const pool = new TaskPool();
+        const pool = await TaskPool.create();
         const id = await pool.createTask({ title: 'Old name' });
         const tool = new UpdateTaskTool(pool);
         const result = await tool.execute({ id, title: 'New name' });
@@ -107,7 +112,7 @@ describe('UpdateTaskTool', () => {
     });
 
     it('updates a task description', async () => {
-        const pool = new TaskPool();
+        const pool = await TaskPool.create();
         const id = await pool.createTask({ title: 'Task A', description: 'old' });
         const tool = new UpdateTaskTool(pool);
         const result = await tool.execute({ id, description: 'New name' });
@@ -117,7 +122,7 @@ describe('UpdateTaskTool', () => {
     });
 
     it('updates structured fields and reports each change', async () => {
-        const pool = new TaskPool();
+        const pool = await TaskPool.create();
         const id = await pool.createTask({ title: 'Task A' });
         const tool = new UpdateTaskTool(pool);
         const result = await tool.execute({
@@ -158,7 +163,7 @@ describe('UpdateTaskTool', () => {
     });
 
     it('combines a status change with a title update', async () => {
-        const pool = new TaskPool();
+        const pool = await TaskPool.create();
         const id = await pool.createTask({ title: 'Old name' });
         const tool = new UpdateTaskTool(pool);
         const result = await tool.execute({ id, status: 'in_progress', title: 'New name' });
@@ -170,7 +175,7 @@ describe('UpdateTaskTool', () => {
     });
 
     it('surfaces title validation errors', async () => {
-        const pool = new TaskPool();
+        const pool = await TaskPool.create();
         const id = await pool.createTask({ title: 'Task A' });
         const tool = new UpdateTaskTool(pool);
         const empty = await tool.execute({ id, title: '  ' });
@@ -182,7 +187,7 @@ describe('UpdateTaskTool', () => {
     });
 
     it('surfaces description validation errors', async () => {
-        const pool = new TaskPool();
+        const pool = await TaskPool.create();
         const id = await pool.createTask({ title: 'Task A', description: 'd' });
         const tool = new UpdateTaskTool(pool);
         const empty = await tool.execute({ id, description: '  ' });
@@ -194,7 +199,7 @@ describe('UpdateTaskTool', () => {
     });
 
     it('surfaces structured-field validation errors', async () => {
-        const pool = new TaskPool();
+        const pool = await TaskPool.create();
         const id = await pool.createTask({ title: 'Task A' });
         const tool = new UpdateTaskTool(pool);
         const badLink = await tool.execute({ id, links: ['nope'] });
@@ -212,7 +217,7 @@ describe('UpdateTaskTool', () => {
     });
 
     it('surfaces progress log oversize errors', async () => {
-        const pool = new TaskPool();
+        const pool = await TaskPool.create();
         const id = await pool.createTask({ title: 'Task A' });
         const tool = new UpdateTaskTool(pool);
         const result = await tool.execute({ id, history: 'x'.repeat(10_001) });
@@ -221,7 +226,7 @@ describe('UpdateTaskTool', () => {
     });
 
     it('adds a dependency', async () => {
-        const pool = new TaskPool();
+        const pool = await TaskPool.create();
         const idA = await pool.createTask({ title: 'Task A' });
         const idB = await pool.createTask({ title: 'Task B' });
         const tool = new UpdateTaskTool(pool);
@@ -233,7 +238,7 @@ describe('UpdateTaskTool', () => {
     });
 
     it('rejects an invalid status', async () => {
-        const pool = new TaskPool();
+        const pool = await TaskPool.create();
         const id = await pool.createTask({ title: 'Task A' });
         const tool = new UpdateTaskTool(pool);
         const result = await tool.execute({ id, status: 'bogus' });
@@ -242,7 +247,7 @@ describe('UpdateTaskTool', () => {
     });
 
     it('rejects the derived pending status', async () => {
-        const pool = new TaskPool();
+        const pool = await TaskPool.create();
         const id = await pool.createTask({ title: 'Task A' });
         const tool = new UpdateTaskTool(pool);
         const result = await tool.execute({ id, status: 'pending' });
@@ -251,7 +256,7 @@ describe('UpdateTaskTool', () => {
     });
 
     it('rejects status combined with dependency_id', async () => {
-        const pool = new TaskPool();
+        const pool = await TaskPool.create();
         const idA = await pool.createTask({ title: 'Task A' });
         const idB = await pool.createTask({ title: 'Task B' });
         const tool = new UpdateTaskTool(pool);
@@ -261,7 +266,7 @@ describe('UpdateTaskTool', () => {
     });
 
     it('ignores non-string optional parameters', async () => {
-        const pool = new TaskPool();
+        const pool = await TaskPool.create();
         const id = await pool.createTask({ title: 'Task A' });
         const tool = new UpdateTaskTool(pool);
         const result = await tool.execute({
@@ -291,7 +296,7 @@ describe('UpdateTaskTool', () => {
     });
 
     it('surfaces pool errors', async () => {
-        const pool = new TaskPool();
+        const pool = await TaskPool.create();
         const id = await pool.createTask({ title: 'Task A' });
         vi.spyOn(pool, 'updateTask').mockRejectedValueOnce(new Error('pool failure'));
         const tool = new UpdateTaskTool(pool);
@@ -301,7 +306,7 @@ describe('UpdateTaskTool', () => {
     });
 
     it('updates a task via unique shortened id and echoes the full id', async () => {
-        const pool = new TaskPool();
+        const pool = await TaskPool.create();
         const id = await pool.createTask({ title: 'Task A' });
         const tool = new UpdateTaskTool(pool);
         const result = await tool.execute({ id: id.slice(0, 8), status: 'in_progress' });
@@ -311,7 +316,7 @@ describe('UpdateTaskTool', () => {
     });
 
     it('adds a dependency referenced by shortened id', async () => {
-        const pool = new TaskPool();
+        const pool = await TaskPool.create();
         const idA = await pool.createTask({ title: 'Task A' });
         const idB = await pool.createTask({ title: 'Task B' });
         const tool = new UpdateTaskTool(pool);
@@ -322,31 +327,24 @@ describe('UpdateTaskTool', () => {
     });
 
     it('reports ambiguous, too-short and not-found for unresolvable ids', async () => {
-        const tmpDir = createTempDir();
+        const dir = await mkdtemp(join(tmpdir(), 'update-task-'));
         try {
-            const filePath = createTempFile(
-                tmpDir,
-                'tasks.json',
-                JSON.stringify({
-                    tasks: [
-                        {
-                            id: 'aaaaaaaa-1111-4111-8111-111111111111',
-                            title: 'A',
-                            history: '',
-                            status: 'ready',
-                            dependencyIds: []
-                        },
-                        {
-                            id: 'aaaaaaaa-2222-4222-8222-222222222222',
-                            title: 'B',
-                            history: '',
-                            status: 'ready',
-                            dependencyIds: []
-                        }
-                    ]
-                })
-            );
-            const tool = new UpdateTaskTool(await TaskPool.load(filePath));
+            const store = new JsonFileStore<Task>({ dir });
+            await store.set({
+                id: 'aaaaaaaa-1111-4111-8111-111111111111',
+                title: 'A',
+                history: '',
+                status: 'ready',
+                dependencies: []
+            });
+            await store.set({
+                id: 'aaaaaaaa-2222-4222-8222-222222222222',
+                title: 'B',
+                history: '',
+                status: 'ready',
+                dependencies: []
+            });
+            const tool = new UpdateTaskTool(await TaskPool.create(new TaskConfiguration({ dir })));
             const ambiguous = await tool.execute({ id: 'aaaaaaaa', status: 'done' });
             expect(ambiguous[0]!.status).toBe(ResultStatus.Error);
             expect(ambiguous[0]!.result).toContain('Ambiguous id prefix');
@@ -359,43 +357,36 @@ describe('UpdateTaskTool', () => {
             expect(missing[0]!.status).toBe(ResultStatus.Error);
             expect(missing[0]!.result).toContain('not found');
         } finally {
-            removeTempDir(tmpDir);
+            await rm(dir, { recursive: true, force: true });
         }
     });
 
     it('reports ambiguous and too-short for unresolvable dependency ids without changing the task', async () => {
-        const tmpDir = createTempDir();
+        const dir = await mkdtemp(join(tmpdir(), 'update-task-'));
         try {
-            const filePath = createTempFile(
-                tmpDir,
-                'tasks.json',
-                JSON.stringify({
-                    tasks: [
-                        {
-                            id: 'bbbbbbbb-1111-4111-8111-111111111111',
-                            title: 'Target',
-                            history: '',
-                            status: 'ready',
-                            dependencyIds: []
-                        },
-                        {
-                            id: 'aaaaaaaa-1111-4111-8111-111111111111',
-                            title: 'A',
-                            history: '',
-                            status: 'ready',
-                            dependencyIds: []
-                        },
-                        {
-                            id: 'aaaaaaaa-2222-4222-8222-222222222222',
-                            title: 'B',
-                            history: '',
-                            status: 'ready',
-                            dependencyIds: []
-                        }
-                    ]
-                })
-            );
-            const pool = await TaskPool.load(filePath);
+            const store = new JsonFileStore<Task>({ dir });
+            await store.set({
+                id: 'bbbbbbbb-1111-4111-8111-111111111111',
+                title: 'Target',
+                history: '',
+                status: 'ready',
+                dependencies: []
+            });
+            await store.set({
+                id: 'aaaaaaaa-1111-4111-8111-111111111111',
+                title: 'A',
+                history: '',
+                status: 'ready',
+                dependencies: []
+            });
+            await store.set({
+                id: 'aaaaaaaa-2222-4222-8222-222222222222',
+                title: 'B',
+                history: '',
+                status: 'ready',
+                dependencies: []
+            });
+            const pool = await TaskPool.create(new TaskConfiguration({ dir }));
             const tool = new UpdateTaskTool(pool);
             const targetId = 'bbbbbbbb-1111-4111-8111-111111111111';
             const ambiguous = await tool.execute({ id: targetId, dependency_id: 'aaaaaaaa' });
@@ -407,12 +398,12 @@ describe('UpdateTaskTool', () => {
             expect(pool.getTask(targetId)!.dependencies).toEqual([]);
             expect(pool.getTask(targetId)!.status).toBe('ready');
         } finally {
-            removeTempDir(tmpDir);
+            await rm(dir, { recursive: true, force: true });
         }
     });
 
     it('rejects self-dependency expressed through a shortened id', async () => {
-        const pool = new TaskPool();
+        const pool = await TaskPool.create();
         const id = await pool.createTask({ title: 'Task A' });
         const tool = new UpdateTaskTool(pool);
         const result = await tool.execute({ id: id.slice(0, 8), dependency_id: id.slice(0, 8) });

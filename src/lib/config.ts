@@ -12,22 +12,11 @@ import {
 } from '../constants.js';
 import { envInt } from '../env.js';
 
-/** Options for {@link TaskConfiguration}. Omitted options fall back to `LLM_CHAT_TASK_*` env vars, then defaults. */
-export type TaskConfigurationOptions = {
-    maxTitleLength?: number;
-    maxDescriptionLength?: number;
-    maxMilestoneLength?: number;
-    maxAcceptanceCriteriaCount?: number;
-    maxAcceptanceCriteriaLength?: number;
-    maxLinksPerTask?: number;
-    maxPlanFieldCount?: number;
-    maxPlanFieldLength?: number;
-    maxHistoryLength?: number;
-    historyPreviewLength?: number;
-};
-
-/** Configuration for task limits. Explicit options win; otherwise `LLM_CHAT_TASK_*` env vars; otherwise defaults. */
+/** Configuration for the task pool: persistence directory and task limits. Explicit options win; otherwise `LLM_CHAT_TASK_*` env vars; otherwise defaults. */
 export class TaskConfiguration {
+    /** Persistence directory, or `undefined` for an in-memory store (env: `LLM_CHAT_TASK_DIR`). */
+    dir: string | undefined;
+
     /** Maximum title length after trimming (env: `LLM_CHAT_TASK_MAX_TITLE_LENGTH`). */
     maxTitleLength: number;
 
@@ -58,7 +47,13 @@ export class TaskConfiguration {
     /** Progress-log preview length in task listings (env: `LLM_CHAT_TASK_HISTORY_PREVIEW_LENGTH`). */
     historyPreviewLength: number;
 
-    constructor(options?: TaskConfigurationOptions) {
+    /**
+     * @param options Partial configuration; omitted options fall back to
+     * `LLM_CHAT_TASK_*` env vars, then defaults. Setting `dir` enables
+     * file-backed persistence on that directory.
+     */
+    constructor(options?: Partial<TaskConfiguration>) {
+        this.dir = options?.dir ?? process.env['LLM_CHAT_TASK_DIR'] ?? undefined;
         this.maxTitleLength =
             options?.maxTitleLength ??
             envInt('LLM_CHAT_TASK_MAX_TITLE_LENGTH', DEFAULT_MAX_TITLE_LENGTH, 1);

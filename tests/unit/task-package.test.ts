@@ -5,8 +5,8 @@ import { ReadTaskTool } from '../../src/tools/read-task.js';
 import { UpdateTaskTool } from '../../src/tools/update-task.js';
 
 describe('TaskToolPackage', () => {
-    it('bundles all three task tools', () => {
-        const pkg = new TaskToolPackage(new TaskPool());
+    it('bundles all three task tools', async () => {
+        const pkg = new TaskToolPackage(await TaskPool.create());
         const tools = pkg.tools();
         expect(tools).toHaveLength(3);
         expect(tools[0]).toBeInstanceOf(CreateTaskTool);
@@ -16,7 +16,7 @@ describe('TaskToolPackage', () => {
     });
 
     it('shares the same pool across all tools', async () => {
-        const pool = new TaskPool();
+        const pool = await TaskPool.create();
         const pkg = new TaskToolPackage(pool);
         const createResult = await pkg.tools()[0]!.execute({ title: 'shared' });
         const id = createResult[0]!.result.split('id: ')[1];
@@ -24,8 +24,8 @@ describe('TaskToolPackage', () => {
         expect(pool.getTasks()[0]!.id).toBe(id);
     });
 
-    it('returns tutorial content', () => {
-        const pkg = new TaskToolPackage(new TaskPool());
+    it('returns tutorial content', async () => {
+        const pkg = new TaskToolPackage(await TaskPool.create());
         const tutorial = pkg.tutorial();
         expect(tutorial).toContain('Tasks');
         expect(tutorial).toContain('create_task');

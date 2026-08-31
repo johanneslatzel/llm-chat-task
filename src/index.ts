@@ -11,7 +11,6 @@ export {
     MIN_ID_PREFIX_LENGTH
 } from './constants.js';
 export { TaskConfiguration } from './lib/config.js';
-export type { TaskConfigurationOptions } from './lib/config.js';
 export type { Task, TaskStatus, TaskPriority, TaskType, PlanField } from './types.js';
 export { TaskPool } from './pool.js';
 export type { CreateTaskInput, UpdateTaskInput, IdResolution } from './pool.js';

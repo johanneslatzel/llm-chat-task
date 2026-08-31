@@ -1,6 +1,7 @@
-import { readFile, writeFile } from 'node:fs/promises';
 import { Mutex } from 'async-mutex';
 import { randomUUID, UUID } from 'crypto';
+import type { ObjectStore } from '@johannes.latzel/json-file-store';
+import { JsonFileStore, MemoryStore } from '@johannes.latzel/json-file-store';
 import { MIN_ID_PREFIX_LENGTH } from './constants.js';
 import { PLAN_FIELDS, PRIORITIES, STATUSES, TYPES } from './lib/fields.js';
 import { TaskConfiguration } from './lib/config.js';
@@ -59,28 +60,6 @@ export type UpdateTaskInput = {
     verification?: string[];
     context?: string[];
     edgeCases?: string[];
-};
-
-type TaskFile = {
-    tasks: Array<{
-        id: string;
-        title: string;
-        description?: string;
-        acceptanceCriteria?: string[];
-        milestone?: string;
-        priority?: TaskPriority;
-        type?: TaskType;
-        links?: string[];
-        steps?: string[];
-        constraints?: string[];
-        outOfScope?: string[];
-        verification?: string[];
-        context?: string[];
-        edgeCases?: string[];
-        history: string;
-        status: TaskStatus;
-        dependencyIds: string[];
-    }>;
 };
 
 function isTaskStatus(value: unknown): value is TaskStatus {
@@ -312,16 +291,108 @@ function copyStructuredFields(source: FieldSource, target: Task): void {
     copyNormalizedArrays(source, target);
 }
 
-/** In-memory task pool with dependency tracking and optional file persistence. */
+/** Validates a stored task's core fields (`status`, `title`, `history`) and structured inputs. */
+function validateTask(task: Task, config: TaskConfiguration): void {
+    if (!isTaskStatus(task.status)) {
+        throw new Error('Invalid task status in store: ' + String(task.status));
+    }
+    if (typeof task.title !== 'string') {
+        throw new Error('Invalid task title in store');
+    }
+    validateStructuredInput(
+        {
+            title: task.title,
+            description: task.description,
+            milestone: task.milestone,
+            acceptanceCriteria: task.acceptanceCriteria,
+            priority: task.priority,
+            type: task.type,
+            links: task.links,
+            steps: task.steps,
+            constraints: task.constraints,
+            outOfScope: task.outOfScope,
+            verification: task.verification,
+            context: task.context,
+            edgeCases: task.edgeCases
+        },
+        config
+    );
+    if (typeof task.history !== 'string') {
+        throw new Error('Invalid task history in store');
+    }
+}
+
+/**
+ * Task pool with dependency tracking and a backing {@link ObjectStore}.
+ *
+ * Create pools via {@link TaskPool.create}: without a configured `dir` the
+ * pool is backed by a fresh in-memory store; with `dir` it is backed by a
+ * `JsonFileStore` on that directory and pre-loaded from any stored tasks.
+ */
 export class TaskPool {
     /** Limits enforced by this pool; fixed at construction. */
     readonly config: TaskConfiguration;
     private readonly tasks: Record<string, Task> = {};
     private readonly mutex: Mutex = new Mutex();
+    private readonly storeRef: ObjectStore<Task>;
 
-    /** @param config Task limits; defaults to a fresh {@link TaskConfiguration}. */
-    constructor(config?: TaskConfiguration) {
-        this.config = config ?? new TaskConfiguration();
+    private constructor(config: TaskConfiguration, store: ObjectStore<Task>) {
+        this.config = config;
+        this.storeRef = store;
+    }
+
+    /**
+     * Creates a task pool. Without a configured `dir` the pool is backed by
+     * a fresh in-memory store. With `dir` (option or `LLM_CHAT_TASK_DIR` env
+     * var) the pool is backed by a `JsonFileStore` on that directory and
+     * loads any stored tasks, validating each strictly and re-establishing
+     * dependency references (dangling dependency ids are pruned). Later
+     * writes persist back into the store.
+     *
+     * @param config Pool configuration (persistence directory and limits);
+     * defaults to a fresh {@link TaskConfiguration}.
+     */
+    static async create(config?: TaskConfiguration): Promise<TaskPool> {
+        const resolved = config ?? new TaskConfiguration();
+        const store = resolved.dir
+            ? new JsonFileStore<Task>({ dir: resolved.dir })
+            : new MemoryStore<Task>();
+        const pool = new TaskPool(resolved, store);
+        if (resolved.dir) {
+            await pool.loadFromStore();
+        }
+        return pool;
+    }
+
+    private async loadFromStore(): Promise<void> {
+        const stored = await this.storeRef.entries();
+        await this.mutex.runExclusive(() => {
+            for (const task of stored) {
+                validateTask(task, this.config);
+            }
+            this.clearMap();
+            const byId: Record<string, Task> = {};
+            for (const task of stored) {
+                const copy: Task = {
+                    id: task.id,
+                    title: normalizeText(task.title),
+                    history: task.history,
+                    status: task.status,
+                    dependencies: []
+                };
+                copyStructuredFields(task, copy);
+                byId[copy.id] = copy;
+                this.tasks[copy.id] = copy;
+            }
+            for (const task of stored) {
+                const copy = byId[task.id]!;
+                for (const depId of task.dependencies) {
+                    if (byId[depId]) {
+                        copy.dependencies.push(depId);
+                    }
+                }
+            }
+        });
     }
 
     /** Creates a task from the given structured input and returns its id. */
@@ -338,8 +409,9 @@ export class TaskPool {
         if (input.priority === undefined) {
             task.priority = 'low';
         }
-        await this.mutex.runExclusive(() => {
+        await this.mutex.runExclusive(async () => {
             this.tasks[task.id] = task;
+            await this.storeRef.set(task);
         });
         return task.id;
     }
@@ -419,7 +491,7 @@ export class TaskPool {
         if (changes.status !== undefined && changes.addDependency !== undefined) {
             throw new Error('Cannot update task: status and addDependency are mutually exclusive');
         }
-        await this.mutex.runExclusive(() => {
+        await this.mutex.runExclusive(async () => {
             const merged: CreateTaskInput = {
                 title: changes.title !== undefined ? normalizeText(changes.title) : task.title
             };
@@ -490,113 +562,24 @@ export class TaskPool {
                 this.addDependencyUnsafe(task, changes.addDependency);
             }
             this.syncDerivedStatuses();
+            await this.storeRef.set(task);
         });
         return task;
     }
 
-    /** Removes all tasks from the pool. */
-    clear(): void {
+    /**
+     * Removes all tasks from the pool and empties the backing store.
+     */
+    async clear(): Promise<void> {
+        await this.mutex.runExclusive(async () => {
+            this.clearMap();
+            await this.storeRef.clear();
+        });
+    }
+
+    private clearMap(): void {
         for (const key of Object.keys(this.tasks)) {
             delete this.tasks[key];
-        }
-    }
-
-    /** Replaces the pool contents with the tasks stored at `path`. */
-    async loadFromFile(path: string): Promise<void> {
-        const data = JSON.parse(await readFile(path, 'utf-8')) as TaskFile;
-        await this.mutex.runExclusive(() => {
-            this.replaceAll(data);
-        });
-    }
-
-    /** Writes all tasks to `path`, storing dependencies by id. */
-    async save(path: string): Promise<void> {
-        const data = await this.mutex.runExclusive(() => {
-            const tasks = Object.values(this.tasks).map((t) => ({
-                id: t.id,
-                title: t.title,
-                description: t.description,
-                milestone: t.milestone,
-                acceptanceCriteria: t.acceptanceCriteria,
-                priority: t.priority,
-                type: t.type,
-                links: t.links,
-                steps: t.steps,
-                constraints: t.constraints,
-                outOfScope: t.outOfScope,
-                verification: t.verification,
-                context: t.context,
-                edgeCases: t.edgeCases,
-                history: t.history,
-                status: t.status,
-                dependencyIds: t.dependencies
-            }));
-            return JSON.stringify({ tasks }, null, 2);
-        });
-        await writeFile(path, data, 'utf-8');
-    }
-
-    /** Creates a pool loaded from the tasks stored at `path`. */
-    static async load(path: string): Promise<TaskPool> {
-        const data = JSON.parse(await readFile(path, 'utf-8')) as TaskFile;
-        const pool = new TaskPool();
-        await pool.mutex.runExclusive(() => {
-            pool.replaceAll(data);
-        });
-        return pool;
-    }
-
-    private replaceAll(data: TaskFile): void {
-        for (const t of data.tasks) {
-            if (!isTaskStatus(t.status)) {
-                throw new Error('Invalid task status in file: ' + String(t.status));
-            }
-            if (typeof t.title !== 'string') {
-                throw new Error('Invalid task title in file');
-            }
-            validateStructuredInput(
-                {
-                    title: t.title,
-                    description: t.description,
-                    milestone: t.milestone,
-                    acceptanceCriteria: t.acceptanceCriteria,
-                    priority: t.priority,
-                    type: t.type,
-                    links: t.links,
-                    steps: t.steps,
-                    constraints: t.constraints,
-                    outOfScope: t.outOfScope,
-                    verification: t.verification,
-                    context: t.context,
-                    edgeCases: t.edgeCases
-                },
-                this.config
-            );
-            if (typeof t.history !== 'string') {
-                throw new Error('Invalid task history in file');
-            }
-        }
-        this.clear();
-        const byId: Record<string, Task> = {};
-        for (const t of data.tasks) {
-            const task: Task = {
-                id: t.id as UUID,
-                title: normalizeText(t.title),
-                history: t.history,
-                status: t.status,
-                dependencies: []
-            };
-            copyStructuredFields(t, task);
-            byId[task.id] = task;
-            this.tasks[task.id] = task;
-        }
-        for (const t of data.tasks) {
-            const task = byId[t.id]!;
-            for (const depId of t.dependencyIds) {
-                if (byId[depId]) {
-                    task.dependencies.push(depId as UUID);
-                }
-            }
         }
     }
 

@@ -1,12 +1,17 @@
 import { describe, it, expect, beforeEach } from 'vitest';
+import { mkdtemp, rm } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import { JsonFileStore } from '@johannes.latzel/json-file-store';
+import { TaskConfiguration } from '../../src/lib/config.js';
 import { TaskPool, MIN_ID_PREFIX_LENGTH } from '../../src/index.js';
-import { createTempDir, removeTempDir, createTempFile } from '../index.js';
+import type { Task } from '../../src/types.js';
 
 describe('TaskPool.resolveId', () => {
     let pool: TaskPool;
 
-    beforeEach(() => {
-        pool = new TaskPool();
+    beforeEach(async () => {
+        pool = await TaskPool.create();
     });
 
     it('returns an exact match for a full id', async () => {
@@ -53,31 +58,26 @@ describe('TaskPool.resolveId', () => {
     });
 
     it('prefers an exact hit over prefix candidates', async () => {
-        const tmpDir = createTempDir();
+        const dir = await mkdtemp(join(tmpdir(), 'task-pool-resolve-'));
         try {
-            const filePath = createTempFile(
-                tmpDir,
-                'tasks.json',
-                JSON.stringify({
-                    tasks: [
-                        {
-                            id: 'aaaaaaaa',
-                            title: 'Short id task',
-                            history: '',
-                            status: 'ready',
-                            dependencyIds: []
-                        },
-                        {
-                            id: 'aaaaaaaa-1111-4111-8111-111111111111',
-                            title: 'Long id task',
-                            history: '',
-                            status: 'ready',
-                            dependencyIds: []
-                        }
-                    ]
-                })
-            );
-            const loaded = await TaskPool.load(filePath);
+            const store = new JsonFileStore<Task>({ dir });
+            // The short id is not a UUID; cast it because only loading (which
+            // reads ids as plain strings) and `resolveId` observe it.
+            await store.set({
+                id: 'aaaaaaaa',
+                title: 'Short id task',
+                history: '',
+                status: 'ready',
+                dependencies: []
+            } as unknown as Task);
+            await store.set({
+                id: 'aaaaaaaa-1111-4111-8111-111111111111',
+                title: 'Long id task',
+                history: '',
+                status: 'ready',
+                dependencies: []
+            });
+            const loaded = await TaskPool.create(new TaskConfiguration({ dir }));
             const exact = loaded.resolveId('aaaaaaaa');
             expect(exact.kind).toBe('exact');
             if (exact.kind === 'exact') {
@@ -89,36 +89,29 @@ describe('TaskPool.resolveId', () => {
                 expect(prefix.task.title).toBe('Long id task');
             }
         } finally {
-            removeTempDir(tmpDir);
+            await rm(dir, { recursive: true, force: true });
         }
     });
 
     it('reports ambiguous with all candidate ids for a shared prefix', async () => {
-        const tmpDir = createTempDir();
+        const dir = await mkdtemp(join(tmpdir(), 'task-pool-resolve-'));
         try {
-            const filePath = createTempFile(
-                tmpDir,
-                'tasks.json',
-                JSON.stringify({
-                    tasks: [
-                        {
-                            id: 'aaaaaaaa-1111-4111-8111-111111111111',
-                            title: 'Task A',
-                            history: '',
-                            status: 'ready',
-                            dependencyIds: []
-                        },
-                        {
-                            id: 'aaaaaaaa-2222-4222-8222-222222222222',
-                            title: 'Task B',
-                            history: '',
-                            status: 'ready',
-                            dependencyIds: []
-                        }
-                    ]
-                })
-            );
-            const loaded = await TaskPool.load(filePath);
+            const store = new JsonFileStore<Task>({ dir });
+            await store.set({
+                id: 'aaaaaaaa-1111-4111-8111-111111111111',
+                title: 'Task A',
+                history: '',
+                status: 'ready',
+                dependencies: []
+            });
+            await store.set({
+                id: 'aaaaaaaa-2222-4222-8222-222222222222',
+                title: 'Task B',
+                history: '',
+                status: 'ready',
+                dependencies: []
+            });
+            const loaded = await TaskPool.create(new TaskConfiguration({ dir }));
             const resolution = loaded.resolveId('aaaaaaaa');
             expect(resolution.kind).toBe('ambiguous');
             if (resolution.kind === 'ambiguous') {
@@ -128,7 +121,7 @@ describe('TaskPool.resolveId', () => {
                 ]);
             }
         } finally {
-            removeTempDir(tmpDir);
+            await rm(dir, { recursive: true, force: true });
         }
     });
 });

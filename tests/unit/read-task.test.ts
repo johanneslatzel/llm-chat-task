@@ -1,8 +1,12 @@
 import { describe, it, expect } from 'vitest';
+import { mkdtemp, rm } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import { JsonFileStore } from '@johannes.latzel/json-file-store';
+import { TaskConfiguration } from '../../src/lib/config.js';
 import { TaskPool, ReadTaskTool } from '../../src/index.js';
 import { ResultStatus } from '@johannes.latzel/llm-chat';
 import type { Task } from '../../src/types.js';
-import { createTempDir, removeTempDir, createTempFile } from '../index.js';
 
 type SerializedTask = Task & { unfinishedDependencies: string[] };
 
@@ -12,7 +16,7 @@ function parseTasks(result: unknown): Task[] {
 
 describe('ReadTaskTool', () => {
     it('reads a single task by id with all fields', async () => {
-        const pool = new TaskPool();
+        const pool = await TaskPool.create();
         const id = await pool.createTask({
             title: 'Task A',
             description: 'the goal',
@@ -52,14 +56,14 @@ describe('ReadTaskTool', () => {
     });
 
     it('reports an error for an unknown task id', async () => {
-        const tool = new ReadTaskTool(new TaskPool());
+        const tool = new ReadTaskTool(await TaskPool.create());
         const result = await tool.execute({ id: 'nonexistent' });
         expect(result[0]!.status).toBe(ResultStatus.Error);
         expect(result[0]!.result).toContain('not found');
     });
 
     it('lists all tasks that are not done when no params are given', async () => {
-        const pool = new TaskPool();
+        const pool = await TaskPool.create();
         const idA = await pool.createTask({ title: 'Task A' });
         const idB = await pool.createTask({ title: 'Task B' });
         const idC = await pool.createTask({ title: 'Task C' });
@@ -73,7 +77,7 @@ describe('ReadTaskTool', () => {
     });
 
     it('lists only available tasks when the available flag is set', async () => {
-        const pool = new TaskPool();
+        const pool = await TaskPool.create();
         const idReady = await pool.createTask({ title: 'Ready' });
         const idInProgress = await pool.createTask({ title: 'In progress' });
         const idPending = await pool.createTask({ title: 'Pending' });
@@ -90,7 +94,7 @@ describe('ReadTaskTool', () => {
     });
 
     it('filters listings by status, priority and type', async () => {
-        const pool = new TaskPool();
+        const pool = await TaskPool.create();
         const idHigh = await pool.createTask({ title: 'High bug', priority: 'high', type: 'bug' });
         await pool.createTask({ title: 'Low feature', priority: 'low', type: 'feature' });
         await pool.createTask({ title: 'No priority' });
@@ -110,7 +114,7 @@ describe('ReadTaskTool', () => {
     });
 
     it('combines filters with the available flag', async () => {
-        const pool = new TaskPool();
+        const pool = await TaskPool.create();
         const idReady = await pool.createTask({ title: 'Ready high', priority: 'high' });
         const idPending = await pool.createTask({ title: 'Pending high', priority: 'high' });
         const dep = await pool.createTask({ title: 'Dep' });
@@ -122,7 +126,7 @@ describe('ReadTaskTool', () => {
     });
 
     it('rejects invalid filter values', async () => {
-        const tool = new ReadTaskTool(new TaskPool());
+        const tool = new ReadTaskTool(await TaskPool.create());
         const badStatus = await tool.execute({ status: 'bogus' });
         expect(badStatus[0]!.status).toBe(ResultStatus.Error);
         expect(badStatus[0]!.result).toContain('Invalid status filter');
@@ -135,7 +139,7 @@ describe('ReadTaskTool', () => {
     });
 
     it('lists a truncated preview of long fields', async () => {
-        const pool = new TaskPool();
+        const pool = await TaskPool.create();
         const id = await pool.createTask({
             title: 'Task A',
             steps: ['x'.repeat(250)]
@@ -153,7 +157,7 @@ describe('ReadTaskTool', () => {
     });
 
     it('keeps the full fields when reading a single task', async () => {
-        const pool = new TaskPool();
+        const pool = await TaskPool.create();
         const id = await pool.createTask({
             title: 'Task A',
             steps: ['y'.repeat(250)]
@@ -168,7 +172,7 @@ describe('ReadTaskTool', () => {
     });
 
     it('lists all not-done tasks when available is false', async () => {
-        const pool = new TaskPool();
+        const pool = await TaskPool.create();
         const idA = await pool.createTask({ title: 'Task A' });
         const idB = await pool.createTask({ title: 'Task B' });
         await pool.updateTask(idB, { status: 'done' });
@@ -179,7 +183,7 @@ describe('ReadTaskTool', () => {
     });
 
     it('rejects id combined with the available flag', async () => {
-        const pool = new TaskPool();
+        const pool = await TaskPool.create();
         const id = await pool.createTask({ title: 'Task A' });
         const tool = new ReadTaskTool(pool);
         const result = await tool.execute({ id, available: true });
@@ -188,7 +192,7 @@ describe('ReadTaskTool', () => {
     });
 
     it('reads a single task by unique shortened id', async () => {
-        const pool = new TaskPool();
+        const pool = await TaskPool.create();
         const id = await pool.createTask({ title: 'Task A' });
         const tool = new ReadTaskTool(pool);
         const result = await tool.execute({ id: id.slice(0, 8) });
@@ -200,31 +204,24 @@ describe('ReadTaskTool', () => {
     });
 
     it('reports ambiguous, too-short and not-found for unresolvable ids', async () => {
-        const tmpDir = createTempDir();
+        const dir = await mkdtemp(join(tmpdir(), 'read-task-'));
         try {
-            const filePath = createTempFile(
-                tmpDir,
-                'tasks.json',
-                JSON.stringify({
-                    tasks: [
-                        {
-                            id: 'aaaaaaaa-1111-4111-8111-111111111111',
-                            title: 'A',
-                            history: '',
-                            status: 'ready',
-                            dependencyIds: []
-                        },
-                        {
-                            id: 'aaaaaaaa-2222-4222-8222-222222222222',
-                            title: 'B',
-                            history: '',
-                            status: 'ready',
-                            dependencyIds: []
-                        }
-                    ]
-                })
-            );
-            const tool = new ReadTaskTool(await TaskPool.load(filePath));
+            const store = new JsonFileStore<Task>({ dir });
+            await store.set({
+                id: 'aaaaaaaa-1111-4111-8111-111111111111',
+                title: 'A',
+                history: '',
+                status: 'ready',
+                dependencies: []
+            });
+            await store.set({
+                id: 'aaaaaaaa-2222-4222-8222-222222222222',
+                title: 'B',
+                history: '',
+                status: 'ready',
+                dependencies: []
+            });
+            const tool = new ReadTaskTool(await TaskPool.create(new TaskConfiguration({ dir })));
             const ambiguous = await tool.execute({ id: 'aaaaaaaa' });
             expect(ambiguous[0]!.status).toBe(ResultStatus.Error);
             expect(ambiguous[0]!.result).toContain('Ambiguous id prefix');
@@ -237,12 +234,12 @@ describe('ReadTaskTool', () => {
             expect(missing[0]!.status).toBe(ResultStatus.Error);
             expect(missing[0]!.result).toContain('not found');
         } finally {
-            removeTempDir(tmpDir);
+            await rm(dir, { recursive: true, force: true });
         }
     });
 
     it('rejects query combined with id', async () => {
-        const pool = new TaskPool();
+        const pool = await TaskPool.create();
         const id = await pool.createTask({ title: 'Task A' });
         const tool = new ReadTaskTool(pool);
         const result = await tool.execute({ id, query: 'task' });
@@ -251,7 +248,7 @@ describe('ReadTaskTool', () => {
     });
 
     it('searches listings with a query regex and reports matched fields', async () => {
-        const pool = new TaskPool();
+        const pool = await TaskPool.create();
         await pool.createTask({ title: 'Add phone validation', steps: ['parse E.164'] });
         await pool.createTask({ title: 'Unrelated task' });
         const tool = new ReadTaskTool(pool);
@@ -266,23 +263,27 @@ describe('ReadTaskTool', () => {
     });
 
     it('query can find tasks by partial id and matches history', async () => {
-        const pool = new TaskPool();
+        const pool = await TaskPool.create();
         const id = await pool.createTask({ title: 'Findable' });
         await pool.updateTask(id, { history: 'touched the database layer' });
         await pool.createTask({ title: 'Other' });
         const tool = new ReadTaskTool(pool);
         const byId = await tool.execute({ query: id.slice(0, 8) });
-        let tasks = parseTasks(byId[0]!.result) as Array<SerializedTask & { matchedFields?: string[] }>;
+        let tasks = parseTasks(byId[0]!.result) as Array<
+            SerializedTask & { matchedFields?: string[] }
+        >;
         expect(tasks.map((t) => t.id)).toEqual([id]);
         expect(tasks[0]!.matchedFields).toEqual(['id']);
         const byHistory = await tool.execute({ query: 'database layer' });
-        tasks = parseTasks(byHistory[0]!.result) as Array<SerializedTask & { matchedFields?: string[] }>;
+        tasks = parseTasks(byHistory[0]!.result) as Array<
+            SerializedTask & { matchedFields?: string[] }
+        >;
         expect(tasks.map((t) => t.id)).toEqual([id]);
         expect(tasks[0]!.matchedFields).toEqual(['history']);
     });
 
     it('combines query with enum filters and the available flag', async () => {
-        const pool = new TaskPool();
+        const pool = await TaskPool.create();
         const ready = await pool.createTask({ title: 'Ready alpha', priority: 'high' });
         await pool.createTask({ title: 'Low alpha', priority: 'low' });
         const pending = await pool.createTask({ title: 'Pending alpha', priority: 'high' });
@@ -303,7 +304,7 @@ describe('ReadTaskTool', () => {
     });
 
     it('rejects an invalid query regex and relaxes under strict=false', async () => {
-        const tool = new ReadTaskTool(new TaskPool());
+        const tool = new ReadTaskTool(await TaskPool.create());
         const bad = await tool.execute({ query: '\\"' });
         expect(bad[0]!.status).toBe(ResultStatus.Error);
         expect(bad[0]!.result).toContain('Invalid query regex');
@@ -318,7 +319,7 @@ describe('ReadTaskTool', () => {
     });
 
     it('ignores a whitespace-only query', async () => {
-        const pool = new TaskPool();
+        const pool = await TaskPool.create();
         await pool.createTask({ title: 'Task A' });
         const tool = new ReadTaskTool(pool);
         const result = await tool.execute({ query: '   ' });
@@ -329,15 +330,13 @@ describe('ReadTaskTool', () => {
     });
 
     it('includes the milestone in single-task and listing output', async () => {
-        const pool = new TaskPool();
+        const pool = await TaskPool.create();
         const id = await pool.createTask({ title: 'Task A', milestone: 'v2-release' });
         await pool.createTask({ title: 'No milestone' });
         const tool = new ReadTaskTool(pool);
         const single = JSON.parse((await tool.execute({ id }))[0]!.result) as SerializedTask;
         expect(single.milestone).toBe('v2-release');
-        const listed = parseTasks((await tool.execute({}))[0]!.result).find(
-            (t) => t.id === id
-          )!;
+        const listed = parseTasks((await tool.execute({}))[0]!.result).find((t) => t.id === id)!;
         expect(listed.milestone).toBe('v2-release');
         const noMilestone = parseTasks((await tool.execute({}))[0]!.result).find(
             (t) => t.title === 'No milestone'
@@ -346,7 +345,7 @@ describe('ReadTaskTool', () => {
     });
 
     it('filters listings by exact milestone after trimming', async () => {
-        const pool = new TaskPool();
+        const pool = await TaskPool.create();
         const idA = await pool.createTask({ title: 'Task A', milestone: 'v2' });
         await pool.createTask({ title: 'Task B', milestone: 'v3' });
         await pool.createTask({ title: 'Task C' });
@@ -360,7 +359,7 @@ describe('ReadTaskTool', () => {
     });
 
     it('composes the milestone filter with the other filters', async () => {
-        const pool = new TaskPool();
+        const pool = await TaskPool.create();
         const ready = await pool.createTask({
             title: 'Ready one',
             priority: 'high',
@@ -387,7 +386,7 @@ describe('ReadTaskTool', () => {
     });
 
     it('query matches the milestone field and reports it via matchedFields', async () => {
-        const pool = new TaskPool();
+        const pool = await TaskPool.create();
         const id = await pool.createTask({
             title: 'Ship it',
             milestone: 'spiel-sdk-migration'

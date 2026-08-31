@@ -14,6 +14,7 @@ import {
 import { TaskConfiguration } from '../../src/lib/config.js';
 
 const ENV_KEYS = [
+    'LLM_CHAT_TASK_DIR',
     'LLM_CHAT_TASK_MAX_TITLE_LENGTH',
     'LLM_CHAT_TASK_MAX_DESCRIPTION_LENGTH',
     'LLM_CHAT_TASK_MAX_MILESTONE_LENGTH',
@@ -35,6 +36,7 @@ describe('TaskConfiguration', () => {
 
     it('uses the defaults when nothing is configured', () => {
         const config = new TaskConfiguration();
+        expect(config.dir).toBeUndefined();
         expect(config.maxTitleLength).toBe(DEFAULT_MAX_TITLE_LENGTH);
         expect(config.maxDescriptionLength).toBe(DEFAULT_MAX_DESCRIPTION_LENGTH);
         expect(config.maxMilestoneLength).toBe(DEFAULT_MAX_MILESTONE_LENGTH);
@@ -45,6 +47,18 @@ describe('TaskConfiguration', () => {
         expect(config.maxPlanFieldLength).toBe(DEFAULT_MAX_PLAN_FIELD_LENGTH);
         expect(config.maxHistoryLength).toBe(DEFAULT_MAX_HISTORY_LENGTH);
         expect(config.historyPreviewLength).toBe(DEFAULT_HISTORY_PREVIEW_LENGTH);
+    });
+
+    it('resolves the persistence directory from the option or env var', () => {
+        const config = new TaskConfiguration({ dir: './tasks' });
+        expect(config.dir).toBe('./tasks');
+
+        process.env.LLM_CHAT_TASK_DIR = '/data/tasks';
+        expect(new TaskConfiguration({ dir: './tasks' }).dir).toBe('./tasks');
+        expect(new TaskConfiguration().dir).toBe('/data/tasks');
+
+        delete process.env.LLM_CHAT_TASK_DIR;
+        expect(new TaskConfiguration().dir).toBeUndefined();
     });
 
     it('prefers explicitly provided options over the environment', () => {

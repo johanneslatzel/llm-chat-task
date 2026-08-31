@@ -16,6 +16,7 @@ nav:
   - Overview: index.md
   - Architecture: architecture.md
   - API Reference: api-reference.md
+  - Environment Variables: env.md
   - Quick Start: quickstart.md
 markdown_extensions:
   - pymdownx.highlight:

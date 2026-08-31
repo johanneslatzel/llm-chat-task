@@ -1,69 +1,56 @@
-import { describe, it, expect, beforeEach } from 'vitest';
-import path from 'node:path';
-import { readFileSync } from 'node:fs';
+import { describe, it, expect } from 'vitest';
+import { mkdtemp, rm } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import { JsonFileStore } from '@johannes.latzel/json-file-store';
+import { TaskConfiguration } from '../../src/lib/config.js';
 import { TaskPool } from '../../src/index.js';
-import { createTempDir, removeTempDir, createTempFile } from '../index.js';
+import type { Task } from '../../src/types.js';
 
-describe('TaskPool persistence', () => {
-    let pool: TaskPool;
+function makeTask(partial: Partial<Task> & { id: string; title: string }): Task {
+    return { history: '', status: 'ready', dependencies: [], ...partial };
+}
 
-    beforeEach(() => {
-        pool = new TaskPool();
-    });
+async function tempDir(): Promise<string> {
+    return mkdtemp(join(tmpdir(), 'task-pool-persistence-'));
+}
 
-    it('save writes tasks with all fields to a file', async () => {
-        const tmpDir = createTempDir();
+/** Creates a store on a fresh temp dir and returns it with its dir. */
+async function storeOnTempDir(): Promise<{ dir: string; store: JsonFileStore<Task> }> {
+    const dir = await tempDir();
+    return { dir, store: new JsonFileStore<Task>({ dir }) };
+}
+
+describe('TaskPool persistence (store-based)', () => {
+    it('persists created and updated tasks into a JsonFileStore', async () => {
+        const { dir } = await storeOnTempDir();
         try {
-            const idA = await pool.createTask({ title: 'Save me A' });
-            const idB = await pool.createTask({
-                title: 'Save me B',
-                description: 'a description',
-                milestone: 'spiel-sdk-migration',
-                acceptanceCriteria: ['criterion'],
-                priority: 'high',
-                type: 'feature',
-                links: ['https://example.com'],
-                steps: ['step'],
-                constraints: ['constraint'],
-                outOfScope: ['out'],
-                verification: ['verify'],
-                context: ['context'],
-                edgeCases: ['edge']
-            });
-            await pool.updateTask(idB, { addDependency: idA });
+            const pool = await TaskPool.create(new TaskConfiguration({ dir }));
+            const idA = await pool.createTask({ title: 'Persist A', priority: 'high' });
+            const idB = await pool.createTask({ title: 'Persist B' });
+            await pool.updateTask(idB, { addDependency: idA, history: 'dep' });
             await pool.updateTask(idA, { status: 'done', history: 'data' });
-            const filePath = path.join(tmpDir, 'saved-tasks.json');
-            await pool.save(filePath);
-            const raw = JSON.parse(readFileSync(filePath, 'utf-8')) as {
-                tasks: Array<Record<string, unknown>>;
-            };
-            expect(raw.tasks).toHaveLength(2);
-            const taskB = raw.tasks.find((t) => t.id === idB)!;
-            expect(taskB.title).toBe('Save me B');
-            expect(taskB.description).toBe('a description');
-            expect(taskB.milestone).toBe('spiel-sdk-migration');
-            expect(taskB.acceptanceCriteria).toEqual(['criterion']);
-            expect(taskB.priority).toBe('high');
-            expect(taskB.type).toBe('feature');
-            expect(taskB.links).toEqual(['https://example.com']);
-            expect(taskB.steps).toEqual(['step']);
-            expect(taskB.constraints).toEqual(['constraint']);
-            expect(taskB.outOfScope).toEqual(['out']);
-            expect(taskB.verification).toEqual(['verify']);
-            expect(taskB.context).toEqual(['context']);
-            expect(taskB.edgeCases).toEqual(['edge']);
-            expect(taskB.dependencyIds).toEqual([idA]);
-            const taskA = raw.tasks.find((t) => t.id === idA)!;
+
+            const reloaded = await TaskPool.create(new TaskConfiguration({ dir }));
+            const tasks = reloaded.getTasks();
+            expect(tasks).toHaveLength(2);
+            const taskA = reloaded.getTask(idA)!;
+            expect(taskA.title).toBe('Persist A');
+            expect(taskA.priority).toBe('high');
             expect(taskA.status).toBe('done');
             expect(taskA.history).toContain('data');
+            const taskB = reloaded.getTask(idB)!;
+            expect(taskB.dependencies).toEqual([idA]);
+            expect(taskB.history).toContain('dep');
         } finally {
-            removeTempDir(tmpDir);
+            await rm(dir, { recursive: true, force: true });
         }
     });
 
-    it('save and load persist structured tasks', async () => {
-        const tmpDir = createTempDir();
+    it('create preserves all structured fields', async () => {
+        const { dir } = await storeOnTempDir();
         try {
+            const pool = await TaskPool.create(new TaskConfiguration({ dir }));
             const id = await pool.createTask({
                 title: 'Persistent Task',
                 description: 'desc',
@@ -80,14 +67,9 @@ describe('TaskPool persistence', () => {
                 edgeCases: ['e']
             });
             await pool.updateTask(id, { status: 'done', history: 'Saved data' });
-            const filePath = path.join(tmpDir, 'tasks.json');
-            await pool.save(filePath);
 
-            const pool2 = new TaskPool();
-            await pool2.loadFromFile(filePath);
-            const tasks = pool2.getTasks();
-            expect(tasks).toHaveLength(1);
-            const task = tasks[0]!;
+            const reloaded = await TaskPool.create(new TaskConfiguration({ dir }));
+            const task = reloaded.getTask(id)!;
             expect(task.title).toBe('Persistent Task');
             expect(task.description).toBe('desc');
             expect(task.milestone).toBe('release-1');
@@ -104,442 +86,285 @@ describe('TaskPool persistence', () => {
             expect(task.status).toBe('done');
             expect(task.history).toContain('Saved data');
         } finally {
-            removeTempDir(tmpDir);
+            await rm(dir, { recursive: true, force: true });
         }
     });
 
-    it('load replaces existing tasks', async () => {
-        const tmpDir = createTempDir();
+    it('create over a JsonFileStore creates a pool bound to that store', async () => {
+        const { dir } = await storeOnTempDir();
         try {
-            await pool.createTask({ title: 'Old Task' });
-            const filePath = createTempFile(tmpDir, 'tasks.json', JSON.stringify({ tasks: [] }));
-            await pool.loadFromFile(filePath);
-            expect(pool.getTasks()).toHaveLength(0);
+            const pool = await TaskPool.create(new TaskConfiguration({ dir }));
+            const id = await pool.createTask({ title: 'Bound task' });
+            // a separate pool over the same dir sees it
+            const reloaded = await TaskPool.create(new TaskConfiguration({ dir }));
+            expect(reloaded.getTask(id)!.title).toBe('Bound task');
         } finally {
-            removeTempDir(tmpDir);
+            await rm(dir, { recursive: true, force: true });
         }
     });
 
-    it('load keeps stored tasks without a priority; the default is create-time only', async () => {
-        const tmpDir = createTempDir();
+    it('create keeps stored tasks without a priority; default is create-time only', async () => {
+        const { dir, store } = await storeOnTempDir();
         try {
-            const filePath = createTempFile(
-                tmpDir,
-                'tasks.json',
-                JSON.stringify({
-                    tasks: [
-                        {
-                            id: '123e4567-e89b-12d3-a456-426614174000',
-                            title: 'Legacy Task',
-                            history: '',
-                            status: 'ready',
-                            dependencyIds: []
-                        }
-                    ]
-                })
+            const id = '123e4567-e89b-12d3-a456-426614174000';
+            // simulate a legacy task persisted without a priority
+            await store.set(makeTask({ id, title: 'Legacy Task' }));
+            const pool = await TaskPool.create(new TaskConfiguration({ dir }));
+            expect(pool.getTask(id)!.priority).toBeUndefined();
+
+            await pool.updateTask(id, { history: 'note' });
+            expect(pool.getTask(id)!.priority).toBeUndefined();
+
+            const freshId = await pool.createTask({ title: 'Fresh Task' });
+            expect(pool.getTask(freshId)!.priority).toBe('low');
+        } finally {
+            await rm(dir, { recursive: true, force: true });
+        }
+    });
+
+    it('create re-establishes dependency references', async () => {
+        const { dir, store } = await storeOnTempDir();
+        try {
+            const idA = 'aaaaaaaa-1111-4111-8111-111111111111';
+            const idB = 'aaaaaaaa-2222-4222-8222-222222222222';
+            await store.set(makeTask({ id: idA, title: 'Task A' }));
+            await store.set(
+                makeTask({ id: idB, title: 'Task B', status: 'pending', dependencies: [idA] })
             );
 
-            const pool2 = new TaskPool();
-            await pool2.loadFromFile(filePath);
-            expect(pool2.getTasks()[0]!.priority).toBeUndefined();
-
-            await pool2.updateTask('123e4567-e89b-12d3-a456-426614174000', { history: 'note' });
-            expect(pool2.getTasks()[0]!.priority).toBeUndefined();
-
-            const freshId = await pool2.createTask({ title: 'Fresh Task' });
-            expect(pool2.getTask(freshId)!.priority).toBe('low');
-        } finally {
-            removeTempDir(tmpDir);
-        }
-    });
-
-    it('load re-establishes dependency references', async () => {
-        const tmpDir = createTempDir();
-        try {
-            const idA = await pool.createTask({ title: 'Task A' });
-            const idB = await pool.createTask({ title: 'Task B' });
-            await pool.updateTask(idB, { addDependency: idA });
-            const filePath = path.join(tmpDir, 'tasks.json');
-            await pool.save(filePath);
-
-            const pool2 = new TaskPool();
-            await pool2.loadFromFile(filePath);
-            const tasks = pool2.getTasks();
+            const pool = await TaskPool.create(new TaskConfiguration({ dir }));
+            const tasks = pool.getTasks();
             expect(tasks).toHaveLength(2);
-            const taskB = tasks.find((t) => t.id === idB)!;
+            const taskB = pool.getTask(idB)!;
             expect(taskB.dependencies).toHaveLength(1);
             expect(taskB.dependencies[0]).toBe(idA);
+            expect(taskB.status).toBe('pending');
         } finally {
-            removeTempDir(tmpDir);
+            await rm(dir, { recursive: true, force: true });
         }
     });
 
-    it('load rejects a missing task title', async () => {
-        const tmpDir = createTempDir();
+    it('create rejects a missing task title', async () => {
+        const { dir, store } = await storeOnTempDir();
         try {
-            const idA = await pool.createTask({ title: 'Task A' });
-            const filePath = createTempFile(
-                tmpDir,
-                'tasks.json',
-                JSON.stringify({
-                    tasks: [
-                        {
-                            id: idA,
-                            description: 'no title here',
-                            history: '',
-                            status: 'ready',
-                            dependencyIds: []
-                        }
-                    ]
-                })
+            await store.set({
+                id: 'aaaaaaaa-1111-4111-8111-111111111111',
+                description: 'no title here',
+                history: '',
+                status: 'ready',
+                dependencies: []
+            } as unknown as Task);
+            await expect(TaskPool.create(new TaskConfiguration({ dir }))).rejects.toThrow(
+                'Invalid task title in store'
             );
-
-            const pool2 = new TaskPool();
-            await expect(pool2.loadFromFile(filePath)).rejects.toThrow('Invalid task title');
         } finally {
-            removeTempDir(tmpDir);
+            await rm(dir, { recursive: true, force: true });
         }
     });
 
-    it('load rejects an empty or over-long task title', async () => {
-        const tmpDir = createTempDir();
+    it('create rejects an empty or over-long task title', async () => {
+        const dir = await tempDir();
         try {
-            const idA = await pool.createTask({ title: 'Task A' });
-            const emptyTitle = createTempFile(
-                tmpDir,
-                'empty-title.json',
-                JSON.stringify({
-                    tasks: [
-                        {
-                            id: idA,
-                            title: '   ',
-                            history: '',
-                            status: 'ready',
-                            dependencyIds: []
-                        }
-                    ]
-                })
-            );
-
-            const pool2 = new TaskPool();
-            await expect(pool2.loadFromFile(emptyTitle)).rejects.toThrow('Title must not be empty');
+            for (const title of ['   ', 'x'.repeat(101)]) {
+                const bad = new JsonFileStore<Task>({ dir });
+                await bad.set(makeTask({ id: 'aaaaaaaa-1111-4111-8111-111111111111', title }));
+                await expect(TaskPool.create(new TaskConfiguration({ dir }))).rejects.toThrow();
+            }
         } finally {
-            removeTempDir(tmpDir);
+            await rm(dir, { recursive: true, force: true });
         }
     });
 
-    it('load rejects a task description over the max length', async () => {
-        const tmpDir = createTempDir();
+    it('create rejects an invalid milestone', async () => {
+        const dir = await tempDir();
         try {
-            const idA = await pool.createTask({ title: 'Task A' });
-            const filePath = createTempFile(
-                tmpDir,
-                'tasks.json',
-                JSON.stringify({
-                    tasks: [
-                        {
-                            id: idA,
-                            title: 'Task A',
-                            description: 'z'.repeat(501),
-                            history: '',
-                            status: 'ready',
-                            dependencyIds: []
-                        }
-                    ]
+            const cases: Array<[string, string]> = [
+                ['bad label', 'Milestone must not contain whitespace'],
+                ['m'.repeat(65), 'Milestone must be at most 64 characters'],
+                ['café', 'Milestone must contain only ASCII characters']
+            ];
+            for (const [milestone, message] of cases) {
+                const store = new JsonFileStore<Task>({ dir });
+                await store.set(
+                    makeTask({ id: 'aaaaaaaa-1111-4111-8111-111111111111', title: 'A', milestone })
+                );
+                await expect(TaskPool.create(new TaskConfiguration({ dir }))).rejects.toThrow(
+                    message
+                );
+            }
+        } finally {
+            await rm(dir, { recursive: true, force: true });
+        }
+    });
+
+    it('create rejects invalid enums, links, and plan fields', async () => {
+        const dir = await tempDir();
+        try {
+            const invalid: Array<[Task, string]> = [
+                [
+                    {
+                        id: 'aaaaaaaa-1111-4111-8111-111111111111',
+                        title: 'A',
+                        history: '',
+                        status: 'ready',
+                        dependencies: [],
+                        priority: 'urgent'
+                    } as unknown as Task,
+                    'Invalid priority'
+                ],
+                [
+                    {
+                        id: 'aaaaaaaa-1111-4111-8111-111111111111',
+                        title: 'A',
+                        history: '',
+                        status: 'ready',
+                        dependencies: [],
+                        type: 'epic'
+                    } as unknown as Task,
+                    'Invalid type'
+                ],
+                [
+                    {
+                        id: 'aaaaaaaa-1111-4111-8111-111111111111',
+                        title: 'A',
+                        history: '',
+                        status: 'ready',
+                        dependencies: [],
+                        links: ['nope']
+                    } as Task,
+                    'Links items must be valid URLs'
+                ],
+                [
+                    {
+                        id: 'aaaaaaaa-1111-4111-8111-111111111111',
+                        title: 'A',
+                        history: '',
+                        status: 'ready',
+                        dependencies: [],
+                        steps: ['x'.repeat(301)]
+                    } as Task,
+                    'Steps items must be at most 300 characters'
+                ]
+            ];
+            for (const [task, message] of invalid) {
+                const store = new JsonFileStore<Task>({ dir });
+                await store.set(task);
+                await expect(TaskPool.create(new TaskConfiguration({ dir }))).rejects.toThrow(
+                    message
+                );
+            }
+        } finally {
+            await rm(dir, { recursive: true, force: true });
+        }
+    });
+
+    it('create rejects a non-string or over-long description', async () => {
+        const dir = await tempDir();
+        try {
+            const store = new JsonFileStore<Task>({ dir });
+            await store.set(
+                makeTask({
+                    id: 'aaaaaaaa-1111-4111-8111-111111111111',
+                    title: 'A',
+                    description: 42 as unknown as string
                 })
             );
+            await expect(TaskPool.create(new TaskConfiguration({ dir }))).rejects.toThrow(
+                'Description must be a string'
+            );
 
-            const pool2 = new TaskPool();
-            await expect(pool2.loadFromFile(filePath)).rejects.toThrow(
+            const store2 = new JsonFileStore<Task>({ dir });
+            await store2.set(
+                makeTask({
+                    id: 'aaaaaaaa-1111-4111-8111-111111111111',
+                    title: 'A',
+                    description: 'z'.repeat(501)
+                })
+            );
+            await expect(TaskPool.create(new TaskConfiguration({ dir }))).rejects.toThrow(
                 'Description must be at most 500 characters'
             );
         } finally {
-            removeTempDir(tmpDir);
+            await rm(dir, { recursive: true, force: true });
         }
     });
 
-    it('load rejects a non-string task description', async () => {
-        const tmpDir = createTempDir();
+    it('create normalizes an empty milestone to no milestone', async () => {
+        const { dir, store } = await storeOnTempDir();
         try {
-            const idA = await pool.createTask({ title: 'Task A' });
-            const filePath = createTempFile(
-                tmpDir,
-                'tasks.json',
-                JSON.stringify({
-                    tasks: [
-                        {
-                            id: idA,
-                            title: 'Task A',
-                            description: 42,
-                            history: '',
-                            status: 'ready',
-                            dependencyIds: []
-                        }
-                    ]
-                })
-            );
-
-            const pool2 = new TaskPool();
-            await expect(pool2.loadFromFile(filePath)).rejects.toThrow(
-                'Description must be a string'
-            );
-        } finally {
-            removeTempDir(tmpDir);
-        }
-    });
-
-    it('load normalizes an empty milestone to no milestone', async () => {
-        const tmpDir = createTempDir();
-        try {
-            const idA = await pool.createTask({ title: 'Task A' });
-            const filePath = createTempFile(
-                tmpDir,
-                'tasks.json',
-                JSON.stringify({
-                    tasks: [
-                        {
-                            id: idA,
-                            title: 'Task A',
-                            milestone: '   ',
-                            history: '',
-                            status: 'ready',
-                            dependencyIds: []
-                        }
-                    ]
-                })
-            );
-
-            const pool2 = new TaskPool();
-            await pool2.loadFromFile(filePath);
-            const loaded = pool2.getTask(idA)!;
+            const id = 'aaaaaaaa-1111-4111-8111-111111111111';
+            await store.set(makeTask({ id, title: 'A', milestone: '   ' }));
+            const pool = await TaskPool.create(new TaskConfiguration({ dir }));
+            const loaded = pool.getTask(id)!;
             expect(loaded.milestone).toBeUndefined();
             expect('milestone' in loaded).toBe(false);
         } finally {
-            removeTempDir(tmpDir);
+            await rm(dir, { recursive: true, force: true });
         }
     });
 
-    it('load rejects an invalid task milestone', async () => {
-        const tmpDir = createTempDir();
+    it('create rejects a non-string or invalid task history/status', async () => {
+        const dir = await tempDir();
         try {
-            const idA = await pool.createTask({ title: 'Task A' });
-            const base = {
-                id: idA,
-                title: 'Task A',
-                history: '',
+            const raw = new JsonFileStore<Task>({ dir });
+            await raw.set({
+                id: 'aaaaaaaa-1111-4111-8111-111111111111',
+                title: 'A',
+                history: 42,
                 status: 'ready',
-                dependencyIds: []
-            };
-            const overLength = createTempFile(
-                tmpDir,
-                'over-length.json',
-                JSON.stringify({ tasks: [{ ...base, milestone: 'm'.repeat(65) }] })
-            );
-            const spaced = createTempFile(
-                tmpDir,
-                'spaced-milestone.json',
-                JSON.stringify({ tasks: [{ ...base, milestone: 'bad label' }] })
-            );
-            const nonAscii = createTempFile(
-                tmpDir,
-                'non-ascii.json',
-                JSON.stringify({ tasks: [{ ...base, milestone: 'café' }] })
-            );
-            const nonString = createTempFile(
-                tmpDir,
-                'non-string.json',
-                JSON.stringify({ tasks: [{ ...base, milestone: 42 }] })
+                dependencies: []
+            } as unknown as Task);
+            await expect(TaskPool.create(new TaskConfiguration({ dir }))).rejects.toThrow(
+                'Invalid task history in store'
             );
 
-            const pool2 = new TaskPool();
-            await expect(pool2.loadFromFile(overLength)).rejects.toThrow(
-                'Milestone must be at most 64 characters (got 65)'
-            );
-            await expect(pool2.loadFromFile(spaced)).rejects.toThrow(
-                'Milestone must not contain whitespace'
-            );
-            await expect(pool2.loadFromFile(nonAscii)).rejects.toThrow(
-                'Milestone must contain only ASCII characters'
-            );
-            await expect(pool2.loadFromFile(nonString)).rejects.toThrow(
-                'Milestone must be a string'
+            const badStatus = new JsonFileStore<Task>({ dir });
+            await badStatus.set({
+                id: 'aaaaaaaa-1111-4111-8111-111111111111',
+                title: 'A',
+                history: '',
+                status: 'finished',
+                dependencies: []
+            } as unknown as Task);
+            await expect(TaskPool.create(new TaskConfiguration({ dir }))).rejects.toThrow(
+                'Invalid task status in store'
             );
         } finally {
-            removeTempDir(tmpDir);
+            await rm(dir, { recursive: true, force: true });
         }
     });
 
-    it('load rejects invalid enums, links, and plan fields', async () => {
-        const tmpDir = createTempDir();
+    it('create silently skips dangling dependency references', async () => {
+        const { dir, store } = await storeOnTempDir();
         try {
-            const idA = await pool.createTask({ title: 'Task A' });
-            const base = {
-                id: idA,
-                title: 'Task A',
-                history: '',
-                status: 'ready',
-                dependencyIds: []
-            };
-            const badPriority = createTempFile(
-                tmpDir,
-                'bad-priority.json',
-                JSON.stringify({ tasks: [{ ...base, priority: 'urgent' }] })
-            );
-            const badType = createTempFile(
-                tmpDir,
-                'bad-type.json',
-                JSON.stringify({ tasks: [{ ...base, type: 'epic' }] })
-            );
-            const badLink = createTempFile(
-                tmpDir,
-                'bad-link.json',
-                JSON.stringify({ tasks: [{ ...base, links: ['nope'] }] })
-            );
-            const badStep = createTempFile(
-                tmpDir,
-                'bad-step.json',
-                JSON.stringify({ tasks: [{ ...base, steps: ['x'.repeat(301)] }] })
-            );
-
-            const pool2 = new TaskPool();
-            await expect(pool2.loadFromFile(badPriority)).rejects.toThrow('Invalid priority');
-            await expect(pool2.loadFromFile(badType)).rejects.toThrow('Invalid type');
-            await expect(pool2.loadFromFile(badLink)).rejects.toThrow('Links items must be valid URLs');
-            await expect(pool2.loadFromFile(badStep)).rejects.toThrow(
-                'Steps items must be at most 300 characters'
-            );
-        } finally {
-            removeTempDir(tmpDir);
-        }
-    });
-
-    it('load rejects a non-string task history', async () => {
-        const tmpDir = createTempDir();
-        try {
-            const idA = await pool.createTask({ title: 'Task A' });
-            const filePath = createTempFile(
-                tmpDir,
-                'tasks.json',
-                JSON.stringify({
-                    tasks: [
-                        {
-                            id: idA,
-                            title: 'Task A',
-                            history: 42,
-                            status: 'ready',
-                            dependencyIds: []
-                        }
-                    ]
+            const idA = 'aaaaaaaa-1111-4111-8111-111111111111';
+            await store.set(
+                makeTask({
+                    id: idA,
+                    title: 'A',
+                    dependencies: ['bbbbbbbb-0000-0000-0000-000000000000']
                 })
             );
-
-            const pool2 = new TaskPool();
-            await expect(pool2.loadFromFile(filePath)).rejects.toThrow(
-                'Invalid task history in file'
-            );
-        } finally {
-            removeTempDir(tmpDir);
-        }
-    });
-
-    it('load silently skips missing dependency references', async () => {
-        const tmpDir = createTempDir();
-        try {
-            const idA = await pool.createTask({ title: 'Task A' });
-            const filePath = createTempFile(
-                tmpDir,
-                'tasks.json',
-                JSON.stringify({
-                    tasks: [
-                        {
-                            id: idA,
-                            title: 'Task A',
-                            history: '',
-                            status: 'ready',
-                            dependencyIds: ['nonexistent-dep']
-                        }
-                    ]
-                })
-            );
-
-            const pool2 = new TaskPool();
-            await pool2.loadFromFile(filePath);
-            const tasks = pool2.getTasks();
+            const pool = await TaskPool.create(new TaskConfiguration({ dir }));
+            const tasks = pool.getTasks();
             expect(tasks).toHaveLength(1);
             expect(tasks[0]!.dependencies).toHaveLength(0);
         } finally {
-            removeTempDir(tmpDir);
+            await rm(dir, { recursive: true, force: true });
         }
     });
 
-    it('load rejects an invalid task status', async () => {
-        const tmpDir = createTempDir();
+    it('clear removes all values from a JsonFileStore', async () => {
+        const { dir, store } = await storeOnTempDir();
         try {
-            const idA = await pool.createTask({ title: 'Task A' });
-            const filePath = createTempFile(
-                tmpDir,
-                'tasks.json',
-                JSON.stringify({
-                    tasks: [
-                        {
-                            id: idA,
-                            title: 'Task A',
-                            history: '',
-                            status: 'finished',
-                            dependencyIds: []
-                        }
-                    ]
-                })
-            );
-
-            const pool2 = new TaskPool();
-            await expect(pool2.loadFromFile(filePath)).rejects.toThrow('Invalid task status');
+            const pool = await TaskPool.create(new TaskConfiguration({ dir }));
+            await pool.createTask({ title: 'A' });
+            await pool.createTask({ title: 'B' });
+            await pool.clear();
+            expect(pool.getTasks()).toHaveLength(0);
+            expect(await store.entries()).toHaveLength(0);
         } finally {
-            removeTempDir(tmpDir);
-        }
-    });
-
-    it('load rejects a missing task status', async () => {
-        const tmpDir = createTempDir();
-        try {
-            const idA = await pool.createTask({ title: 'Task A' });
-            const filePath = createTempFile(
-                tmpDir,
-                'tasks.json',
-                JSON.stringify({
-                    tasks: [
-                        {
-                            id: idA,
-                            title: 'Task A',
-                            history: '',
-                            dependencyIds: []
-                        }
-                    ]
-                })
-            );
-
-            const pool2 = new TaskPool();
-            await expect(pool2.loadFromFile(filePath)).rejects.toThrow('Invalid task status');
-        } finally {
-            removeTempDir(tmpDir);
-        }
-    });
-
-    it('static load creates a pool from a file path', async () => {
-        const tmpDir = createTempDir();
-        try {
-            const id = await pool.createTask({ title: 'Static Load' });
-            await pool.updateTask(id, { status: 'in_progress' });
-            const filePath = path.join(tmpDir, 'tasks.json');
-            await pool.save(filePath);
-
-            const pool2 = await TaskPool.load(filePath);
-            const tasks = pool2.getTasks();
-            expect(tasks).toHaveLength(1);
-            expect(tasks[0]!.title).toBe('Static Load');
-            expect(tasks[0]!.status).toBe('in_progress');
-        } finally {
-            removeTempDir(tmpDir);
+            await rm(dir, { recursive: true, force: true });
         }
     });
 });

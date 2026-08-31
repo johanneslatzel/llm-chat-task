@@ -14,28 +14,28 @@ All tools return a `PartialToolResult` with shape:
 
 ## TaskPool
 
-In-memory task pool. Each task has an id, a required short `title`, optional
+Task pool backed by an `ObjectStore`. Each task has an id, a required short `title`, optional
 structured plan fields, an append-only `history` progress log, a `status`
 (`pending` | `ready` | `in_progress` | `done`), and dependencies on other tasks
 (referenced by id).
 
 A task carries the following fields:
 
-| Field | Type | Description |
-| ----- | ---- | ----------- |
-| `title` | string (required) | Short, specific, imperative title. Non-empty, at most `maxTitleLength` (default 100). |
-| `description` | string (optional) | The goal: what to do and why. At most `maxDescriptionLength` (default 500). |
-| `milestone` | string (optional) | Identifier-style grouping label, e.g. `release-2026-q3`. Printable ASCII without whitespace, at most `maxMilestoneLength` (default 64); empty or whitespace-only stores no milestone. |
-| `acceptanceCriteria` | string[] (optional) | Testable definition of done. At most `maxAcceptanceCriteriaCount` (default 10) items of `maxAcceptanceCriteriaLength` (default 200) characters each. |
-| `priority` | `low \| medium \| high` (optional) | Stated importance. `createTask` defaults it to `low` when omitted; absence only occurs on tasks loaded from files stored before the default existed. |
-| `type` | `feature \| bug \| refactor \| chore \| research` (optional) | Kind of work. |
-| `links` | string[] (optional) | Reference URLs. At most `maxLinksPerTask` (default 20), each a valid URL. |
-| `steps` | string[] (optional) | Ordered execution plan. |
-| `constraints` | string[] (optional) | Must-do / must-not-do guardrails. |
-| `outOfScope` | string[] (optional) | Explicitly excluded work. |
-| `verification` | string[] (optional) | Commands or checks that confirm completion. |
-| `context` | string[] (optional) | Relevant files, patterns, architectural decisions. |
-| `edgeCases` | string[] (optional) | Known pitfalls and edge conditions. |
+| Field                | Type                                                         | Description                                                                                                                                                                           |
+| -------------------- | ------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `title`              | string (required)                                            | Short, specific, imperative title. Non-empty, at most `maxTitleLength` (default 100).                                                                                                 |
+| `description`        | string (optional)                                            | The goal: what to do and why. At most `maxDescriptionLength` (default 500).                                                                                                           |
+| `milestone`          | string (optional)                                            | Identifier-style grouping label, e.g. `release-2026-q3`. Printable ASCII without whitespace, at most `maxMilestoneLength` (default 64); empty or whitespace-only stores no milestone. |
+| `acceptanceCriteria` | string[] (optional)                                          | Testable definition of done. At most `maxAcceptanceCriteriaCount` (default 10) items of `maxAcceptanceCriteriaLength` (default 200) characters each.                                  |
+| `priority`           | `low \| medium \| high` (optional)                           | Stated importance. `createTask` defaults it to `low` when omitted; absence only occurs on tasks loaded from a store that recorded no priority.                                      |
+| `type`               | `feature \| bug \| refactor \| chore \| research` (optional) | Kind of work.                                                                                                                                                                         |
+| `links`              | string[] (optional)                                          | Reference URLs. At most `maxLinksPerTask` (default 20), each a valid URL.                                                                                                             |
+| `steps`              | string[] (optional)                                          | Ordered execution plan.                                                                                                                                                               |
+| `constraints`        | string[] (optional)                                          | Must-do / must-not-do guardrails.                                                                                                                                                     |
+| `outOfScope`         | string[] (optional)                                          | Explicitly excluded work.                                                                                                                                                             |
+| `verification`       | string[] (optional)                                          | Commands or checks that confirm completion.                                                                                                                                           |
+| `context`            | string[] (optional)                                          | Relevant files, patterns, architectural decisions.                                                                                                                                    |
+| `edgeCases`          | string[] (optional)                                          | Known pitfalls and edge conditions.                                                                                                                                                   |
 
 The six plan arrays (`steps`, `constraints`, `outOfScope`, `verification`,
 `context`, `edgeCases`) share limits: at most `maxPlanFieldCount` (default 20)
@@ -45,7 +45,7 @@ items are trimmed and must be non-empty.
 ```typescript
 import { TaskPool } from '@johannes.latzel/llm-chat-task';
 
-const pool = new TaskPool();
+const pool = await TaskPool.create();
 const id = await pool.createTask({
     title: 'Add phone validation to UserService',
     description: 'Reject malformed phone numbers at the service layer.',
@@ -56,33 +56,34 @@ const id = await pool.createTask({
     verification: ['npm run verify']
 });
 await pool.updateTask(id, { status: 'done', history: 'Result data' });
-await pool.save('./tasks.json');
 ```
 
 ### `TaskConfiguration`
 
-Controls the task limits. Explicit options win; otherwise `LLM_CHAT_TASK_*`
-environment variables are used; otherwise the defaults. Values are clamped to
-a minimum of 1.
+Controls the persistence directory and task limits. Explicit options win;
+otherwise `LLM_CHAT_TASK_*` environment variables are used; otherwise the
+defaults. Environment-derived values are clamped to a minimum of 1. See
+[Environment Variables](env.md) for the full table.
 
 ```typescript
 import { TaskPool, TaskConfiguration } from '@johannes.latzel/llm-chat-task';
 
-const pool = new TaskPool(new TaskConfiguration({ maxTitleLength: 80 }));
+const pool = await TaskPool.create(new TaskConfiguration({ maxTitleLength: 80 }));
 ```
 
-| Field | Default | Env var |
-| ----- | ------- | ------- |
-| `maxTitleLength` | 100 | `LLM_CHAT_TASK_MAX_TITLE_LENGTH` |
-| `maxDescriptionLength` | 500 | `LLM_CHAT_TASK_MAX_DESCRIPTION_LENGTH` |
-| `maxMilestoneLength` | 64 | `LLM_CHAT_TASK_MAX_MILESTONE_LENGTH` |
-| `maxAcceptanceCriteriaCount` | 10 | `LLM_CHAT_TASK_MAX_ACCEPTANCE_CRITERIA_COUNT` |
-| `maxAcceptanceCriteriaLength` | 200 | `LLM_CHAT_TASK_MAX_ACCEPTANCE_CRITERIA_LENGTH` |
-| `maxLinksPerTask` | 20 | `LLM_CHAT_TASK_MAX_LINKS_PER_TASK` |
-| `maxPlanFieldCount` | 20 | `LLM_CHAT_TASK_MAX_PLAN_FIELD_COUNT` |
-| `maxPlanFieldLength` | 300 | `LLM_CHAT_TASK_MAX_PLAN_FIELD_LENGTH` |
-| `maxHistoryLength` | 10,000 | `LLM_CHAT_TASK_MAX_HISTORY_LENGTH` |
-| `historyPreviewLength` | 200 | `LLM_CHAT_TASK_HISTORY_PREVIEW_LENGTH` |
+| Field                         | Default | Env var                                        |
+| ----------------------------- | ------- | ---------------------------------------------- |
+| `dir`                         | (none)  | `LLM_CHAT_TASK_DIR`                            |
+| `maxTitleLength`              | 100     | `LLM_CHAT_TASK_MAX_TITLE_LENGTH`               |
+| `maxDescriptionLength`        | 500     | `LLM_CHAT_TASK_MAX_DESCRIPTION_LENGTH`         |
+| `maxMilestoneLength`          | 64      | `LLM_CHAT_TASK_MAX_MILESTONE_LENGTH`           |
+| `maxAcceptanceCriteriaCount`  | 10      | `LLM_CHAT_TASK_MAX_ACCEPTANCE_CRITERIA_COUNT`  |
+| `maxAcceptanceCriteriaLength` | 200     | `LLM_CHAT_TASK_MAX_ACCEPTANCE_CRITERIA_LENGTH` |
+| `maxLinksPerTask`             | 20      | `LLM_CHAT_TASK_MAX_LINKS_PER_TASK`             |
+| `maxPlanFieldCount`           | 20      | `LLM_CHAT_TASK_MAX_PLAN_FIELD_COUNT`           |
+| `maxPlanFieldLength`          | 300     | `LLM_CHAT_TASK_MAX_PLAN_FIELD_LENGTH`          |
+| `maxHistoryLength`            | 10,000  | `LLM_CHAT_TASK_MAX_HISTORY_LENGTH`             |
+| `historyPreviewLength`        | 200     | `LLM_CHAT_TASK_HISTORY_PREVIEW_LENGTH`         |
 
 The environment variables are read when the configuration is constructed, so
 the same `TaskPool` enforces its limits consistently for its whole lifetime.
@@ -98,21 +99,50 @@ An omitted `priority` defaults to `low`.
 
 `changes` may contain any of:
 
-| Field | Type | Description |
-| ----- | ---- | ----------- |
-| `status` | `'ready' \| 'in_progress' \| 'done'` | Sets the task status. `pending` is derived and rejected. Setting a status while dependencies are unfinished is rejected. |
-| `history` | string | Appends a timestamped entry (`[<ISO timestamp>] <text>`) to the task's progress log. Entries accumulate newline-separated; appending beyond the `maxHistoryLength` cap is rejected and the log is left unchanged. |
-| `addDependency` | string | Id of a task to add as a dependency. Rejects missing ids, self-dependencies, duplicates, cycles, and any dependency on a task that is `in_progress` or `done`; unfinished dependencies set the task to `pending`. |
-| `title` | string | Replaces the title. Must be non-empty and at most `maxTitleLength`. |
-| `description` | string | Replaces the description. Must be non-empty and at most `maxDescriptionLength`. |
-| `milestone` | string | Replaces the milestone (printable ASCII without whitespace, at most `maxMilestoneLength`); empty or whitespace-only clears it. |
-| `acceptanceCriteria` | string[] | Replaces the whole array (validated like create). |
-| `priority` / `type` | enum | Replaces the value. |
-| `links` | string[] | Replaces the whole array (validated like create). |
-| `steps`, `constraints`, `outOfScope`, `verification`, `context`, `edgeCases` | string[] | Replace the whole array (validated like create). |
+| Field                                                                        | Type                                 | Description                                                                                                                                                                                                       |
+| ---------------------------------------------------------------------------- | ------------------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `status`                                                                     | `'ready' \| 'in_progress' \| 'done'` | Sets the task status. `pending` is derived and rejected. Setting a status while dependencies are unfinished is rejected.                                                                                          |
+| `history`                                                                    | string                               | Appends a timestamped entry (`[<ISO timestamp>] <text>`) to the task's progress log. Entries accumulate newline-separated; appending beyond the `maxHistoryLength` cap is rejected and the log is left unchanged. |
+| `addDependency`                                                              | string                               | Id of a task to add as a dependency. Rejects missing ids, self-dependencies, duplicates, cycles, and any dependency on a task that is `in_progress` or `done`; unfinished dependencies set the task to `pending`. |
+| `title`                                                                      | string                               | Replaces the title. Must be non-empty and at most `maxTitleLength`.                                                                                                                                               |
+| `description`                                                                | string                               | Replaces the description. Must be non-empty and at most `maxDescriptionLength`.                                                                                                                                   |
+| `milestone`                                                                  | string                               | Replaces the milestone (printable ASCII without whitespace, at most `maxMilestoneLength`); empty or whitespace-only clears it.                                                                                    |
+| `acceptanceCriteria`                                                         | string[]                             | Replaces the whole array (validated like create).                                                                                                                                                                 |
+| `priority` / `type`                                                          | enum                                 | Replaces the value.                                                                                                                                                                                               |
+| `links`                                                                      | string[]                             | Replaces the whole array (validated like create).                                                                                                                                                                 |
+| `steps`, `constraints`, `outOfScope`, `verification`, `context`, `edgeCases` | string[]                             | Replace the whole array (validated like create).                                                                                                                                                                  |
 
 All validation happens before any change is applied; a rejected update never
 partially modifies the task.
+
+### Store backend
+
+Every `TaskPool` is backed by an `ObjectStore<Task>` from
+`@johannes.latzel/json-file-store`. Without a configured directory the pool
+uses a fresh `MemoryStore`; with a `dir` (option or `LLM_CHAT_TASK_DIR` env
+var) it uses a `JsonFileStore` on that directory:
+
+```typescript
+import { TaskConfiguration } from '@johannes.latzel/llm-chat-task';
+import { TaskPool } from '@johannes.latzel/llm-chat-task';
+
+// in-memory pool
+const pool = await TaskPool.create();
+
+// file-backed pool, pre-loaded from any stored tasks
+const pool = await TaskPool.create(new TaskConfiguration({ dir: './tasks' }));
+```
+
+With a `dir` configured:
+
+- `createTask` and `updateTask` persist the changed task to the store
+- `clear()` also empties the store
+
+`TaskPool.create` validates each stored task strictly, prunes dangling
+dependency ids, and keeps the pool bound to that store, so later writes
+persist back into it. The legacy single-file `save(path)` /
+`loadFromFile(path)` / `TaskPool.load(path)` and `loadStored()` are removed;
+persistence is always store-backed.
 
 ## create_task
 
@@ -124,21 +154,21 @@ field productively.
 
 **Parameters:**
 
-| Parameter | Type | Required | Description |
-| --------- | ---- | -------- | ----------- |
-| `title` | string | yes | Short, specific, imperative title. At most `maxTitleLength` (default 100). |
-| `description` | string | no | What to do and why; current vs expected behavior where relevant. At most `maxDescriptionLength` (default 500). |
-| `milestone` | string | no | Identifier-style grouping label, e.g. `release-2026-q3`. Printable ASCII without whitespace, at most `maxMilestoneLength` (default 64); empty or whitespace-only stores no milestone. |
-| `acceptance_criteria` | string[] | no | Testable definition of done (Given/When/Then or checklist). At most 10 items of 200 characters. |
-| `steps` | string[] | no | Ordered execution plan. |
-| `context` | string[] | no | Relevant files, patterns, architectural decisions. |
-| `constraints` | string[] | no | Must-do / must-not-do guardrails. |
-| `out_of_scope` | string[] | no | Explicitly excluded work. |
-| `verification` | string[] | no | Commands or checks that confirm the work is done. |
-| `edge_cases` | string[] | no | Known pitfalls and edge conditions. |
-| `priority` | string | no | `low`, `medium` or `high`. Defaults to low when omitted. |
-| `type` | string | no | `feature`, `bug`, `refactor`, `chore` or `research`. |
-| `links` | string[] | no | Reference URLs. At most 20, each a valid URL. |
+| Parameter             | Type     | Required | Description                                                                                                                                                                           |
+| --------------------- | -------- | -------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `title`               | string   | yes      | Short, specific, imperative title. At most `maxTitleLength` (default 100).                                                                                                            |
+| `description`         | string   | no       | What to do and why; current vs expected behavior where relevant. At most `maxDescriptionLength` (default 500).                                                                        |
+| `milestone`           | string   | no       | Identifier-style grouping label, e.g. `release-2026-q3`. Printable ASCII without whitespace, at most `maxMilestoneLength` (default 64); empty or whitespace-only stores no milestone. |
+| `acceptance_criteria` | string[] | no       | Testable definition of done (Given/When/Then or checklist). At most 10 items of 200 characters.                                                                                       |
+| `steps`               | string[] | no       | Ordered execution plan.                                                                                                                                                               |
+| `context`             | string[] | no       | Relevant files, patterns, architectural decisions.                                                                                                                                    |
+| `constraints`         | string[] | no       | Must-do / must-not-do guardrails.                                                                                                                                                     |
+| `out_of_scope`        | string[] | no       | Explicitly excluded work.                                                                                                                                                             |
+| `verification`        | string[] | no       | Commands or checks that confirm the work is done.                                                                                                                                     |
+| `edge_cases`          | string[] | no       | Known pitfalls and edge conditions.                                                                                                                                                   |
+| `priority`            | string   | no       | `low`, `medium` or `high`. Defaults to low when omitted.                                                                                                                              |
+| `type`                | string   | no       | `feature`, `bug`, `refactor`, `chore` or `research`.                                                                                                                                  |
+| `links`               | string[] | no       | Reference URLs. At most 20, each a valid URL.                                                                                                                                         |
 
 **Returns:** `"Task created with id: <id>"`
 
@@ -151,16 +181,16 @@ tasks that are not done.
 
 **Parameters:**
 
-| Parameter | Type | Required | Description |
-| --------- | ---- | -------- | ----------- |
-| `id` | string | no | The id of the task to read. A shortened id of at least `MIN_ID_PREFIX_LENGTH` (default 8) characters is accepted when it matches exactly one task; an exact full-id match always wins. Ambiguous prefixes are rejected with the list of matching ids. Mutually exclusive with `available` and `query`. |
-| `query` | string | no | JavaScript regex matched case-insensitively against title, description, id, history and every string-array item. Mutually exclusive with `id`; composes with `available`, `status`, `priority` and `type`. A whitespace-only query is ignored. |
-| `strict` | boolean | no | When true (default), `query` is compiled with the Unicode `u` flag, which rejects legacy escape sequences like `\"`. Set false to allow such escapes (the pattern is then compiled with only the `i` flag). |
-| `available` | boolean | no | When true, list only tasks with no unfinished dependencies that are not done. Mutually exclusive with `id`. |
-| `status` | string | no | Filter listings by status (`pending`, `ready`, `in_progress`, `done`). |
-| `priority` | string | no | Filter listings by priority (`low`, `medium`, `high`). |
-| `type` | string | no | Filter listings by type (`feature`, `bug`, `refactor`, `chore`, `research`). |
-| `milestone` | string | no | Filter listings by exact milestone (compared after trimming); a value no task has yields an empty listing. Composes with the other filters. |
+| Parameter   | Type    | Required | Description                                                                                                                                                                                                                                                                                            |
+| ----------- | ------- | -------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `id`        | string  | no       | The id of the task to read. A shortened id of at least `MIN_ID_PREFIX_LENGTH` (default 8) characters is accepted when it matches exactly one task; an exact full-id match always wins. Ambiguous prefixes are rejected with the list of matching ids. Mutually exclusive with `available` and `query`. |
+| `query`     | string  | no       | JavaScript regex matched case-insensitively against title, description, id, history, milestone and every string-array item. Mutually exclusive with `id`; composes with `available`, `status`, `priority` and `type`. A whitespace-only query is ignored.                                                         |
+| `strict`    | boolean | no       | When true (default), `query` is compiled with the Unicode `u` flag, which rejects legacy escape sequences like `\"`. Set false to allow such escapes (the pattern is then compiled with only the `i` flag).                                                                                            |
+| `available` | boolean | no       | When true, list only tasks with no unfinished dependencies that are not done. Mutually exclusive with `id`.                                                                                                                                                                                            |
+| `status`    | string  | no       | Filter listings by status (`pending`, `ready`, `in_progress`, `done`).                                                                                                                                                                                                                                 |
+| `priority`  | string  | no       | Filter listings by priority (`low`, `medium`, `high`).                                                                                                                                                                                                                                                 |
+| `type`      | string  | no       | Filter listings by type (`feature`, `bug`, `refactor`, `chore`, `research`).                                                                                                                                                                                                                           |
+| `milestone` | string  | no       | Filter listings by exact milestone (compared after trimming); a value no task has yields an empty listing. Composes with the other filters.                                                                                                                                                            |
 
 **Returns:** JSON. With `id`: the task with all fields plus `unfinishedDependencies`
 (short ids resolve to the full task). Without: a JSON array of the same objects,
@@ -179,25 +209,25 @@ caller to record a completion summary in `history` when marking a task done.
 
 **Parameters:**
 
-| Parameter | Type | Required | Description |
-| --------- | ---- | -------- | ----------- |
-| `id` | string | yes | The id of the task to update. A shortened id of at least 8 characters is accepted when it matches exactly one task; success messages echo the resolved full UUID. |
-| `status` | string | no | `ready`, `in_progress` or `done`. `pending` is derived automatically. Mutually exclusive with `dependency_id`. |
-| `history` | string | no | Appends a timestamped entry to the task's progress log (capped at `maxHistoryLength` characters, default 10,000). |
-| `dependency_id` | string | no | The id of a task this task should depend on; shortened ids are accepted like `id`. Mutually exclusive with `status`. |
-| `title` | string | no | New title (non-empty, at most `maxTitleLength`). |
-| `description` | string | no | New description (non-empty, at most `maxDescriptionLength`). |
-| `milestone` | string | no | New identifier-style milestone label (printable ASCII without whitespace, at most `maxMilestoneLength`); an empty string clears the milestone. |
-| `acceptance_criteria` | string[] | no | New acceptance criteria list; replaces the whole array. |
-| `steps` | string[] | no | New steps list; replaces the whole array. |
-| `context` | string[] | no | New context list; replaces the whole array. |
-| `constraints` | string[] | no | New constraints list; replaces the whole array. |
-| `out_of_scope` | string[] | no | New out-of-scope list; replaces the whole array. |
-| `verification` | string[] | no | New verification list; replaces the whole array. |
-| `edge_cases` | string[] | no | New edge-cases list; replaces the whole array. |
-| `priority` | string | no | New priority (`low`, `medium`, `high`). |
-| `type` | string | no | New type (`feature`, `bug`, `refactor`, `chore`, `research`). |
-| `links` | string[] | no | New links list; replaces the whole array. |
+| Parameter             | Type     | Required | Description                                                                                                                                                       |
+| --------------------- | -------- | -------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `id`                  | string   | yes      | The id of the task to update. A shortened id of at least 8 characters is accepted when it matches exactly one task; success messages echo the resolved full UUID. |
+| `status`              | string   | no       | `ready`, `in_progress` or `done`. `pending` is derived automatically. Mutually exclusive with `dependency_id`.                                                    |
+| `history`             | string   | no       | Appends a timestamped entry to the task's progress log (capped at `maxHistoryLength` characters, default 10,000).                                                 |
+| `dependency_id`       | string   | no       | The id of a task this task should depend on; shortened ids are accepted like `id`. Mutually exclusive with `status`.                                              |
+| `title`               | string   | no       | New title (non-empty, at most `maxTitleLength`).                                                                                                                  |
+| `description`         | string   | no       | New description (non-empty, at most `maxDescriptionLength`).                                                                                                      |
+| `milestone`           | string   | no       | New identifier-style milestone label (printable ASCII without whitespace, at most `maxMilestoneLength`); an empty string clears the milestone.                    |
+| `acceptance_criteria` | string[] | no       | New acceptance criteria list; replaces the whole array.                                                                                                           |
+| `steps`               | string[] | no       | New steps list; replaces the whole array.                                                                                                                         |
+| `context`             | string[] | no       | New context list; replaces the whole array.                                                                                                                       |
+| `constraints`         | string[] | no       | New constraints list; replaces the whole array.                                                                                                                   |
+| `out_of_scope`        | string[] | no       | New out-of-scope list; replaces the whole array.                                                                                                                  |
+| `verification`        | string[] | no       | New verification list; replaces the whole array.                                                                                                                  |
+| `edge_cases`          | string[] | no       | New edge-cases list; replaces the whole array.                                                                                                                    |
+| `priority`            | string   | no       | New priority (`low`, `medium`, `high`).                                                                                                                           |
+| `type`                | string   | no       | New type (`feature`, `bug`, `refactor`, `chore`, `research`).                                                                                                     |
+| `links`               | string[] | no       | New links list; replaces the whole array.                                                                                                                         |
 
 **Returns:** `"Task updated with id: <id>, status: <status>"`, extended with a
 per-updated-field suffix (e.g. `", title updated"`, `", progress entry
@@ -227,7 +257,7 @@ Groups all three task tools around a shared `TaskPool`.
 
 ```typescript
 import { TaskPool, TaskToolPackage } from '@johannes.latzel/llm-chat-task';
-const pkg = new TaskToolPackage(new TaskPool());
+const pkg = new TaskToolPackage(await TaskPool.create());
 service.tools().add(pkg);
 ```
 

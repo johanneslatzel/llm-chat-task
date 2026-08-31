@@ -20,7 +20,7 @@ work, verification, and edge cases. Tasks read as small, executable specs.
 
 ## Features
 
-- in-memory task store with dependency tracking, cycle detection, and optional file persistence
+- store-backed task pool with dependency tracking, cycle detection, and optional file persistence
 - structured tasks: title (required) + description, acceptance criteria, priority, type, links, and plan arrays
 - optional milestone grouping label per task; `read_task` filters listings by exact milestone
 - instructive tool descriptions that coach the LLM on how to fill each field
