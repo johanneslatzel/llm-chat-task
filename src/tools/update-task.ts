@@ -3,8 +3,9 @@ import {
     ResultStatus,
     Tool,
     ToolParameterProperty,
-    ToolParameters
+    ToolParameters,
 } from '@johannes.latzel/llm-chat';
+import type { UUID } from 'node:crypto';
 import { MIN_ID_PREFIX_LENGTH } from '../constants.js';
 import { applyStructuredFields } from '../lib/fields.js';
 import { resolveExactOrError } from '../lib/id-resolution.js';
@@ -22,109 +23,117 @@ export class UpdateTaskTool extends Tool {
             'update_task',
             'Use this tool to update a task: set its status (ready, in_progress or done), refine its ' +
                 'title or any structured plan field, append a timestamped entry to its progress log, ' +
-                'or add a dependency on another task. Status and dependency_id are mutually exclusive. ' +
-                'Array fields replace the whole array; to update a plan field, pass the complete new ' +
-                'list. When marking a task done, record a short summary of what was completed in ' +
-                'history so the result is not lost. Shortened ids of at least ' +
+                'or add or remove a dependency on another task. Status is mutually exclusive with ' +
+                'dependency_id and remove_dependency_id; dependency_id and remove_dependency_id are ' +
+                'mutually exclusive with each other. Array fields replace the whole array; to update a ' +
+                'plan field, pass the complete new list. When marking a task done, record a short ' +
+                'summary of what was completed in history so the result is not lost. Shortened ids of ' +
+                'at least ' +
                 MIN_ID_PREFIX_LENGTH +
-                ' characters are accepted for id and dependency_id when they match exactly one task.',
+                ' characters are accepted for id, dependency_id and remove_dependency_id when they ' +
+                'match exactly one task.',
             new ToolParameters(
                 {
                     id: ToolParameterProperty.string(
                         'The id of the task to update; a shortened id of at least ' +
                             MIN_ID_PREFIX_LENGTH +
-                            ' characters resolves when unique'
+                            ' characters resolves when unique',
                     ),
                     status: ToolParameterProperty.string(
-                        'The new status: ready, in_progress or done. pending is derived automatically.'
+                        'The new status: ready, in_progress or done. pending is derived automatically.',
                     ),
                     history: ToolParameterProperty.string(
                         'Appends a timestamped entry to the task progress log. Entries accumulate; the log is capped at ' +
                             pool.config.maxHistoryLength +
-                            ' characters. When marking a task done, record the outcome here.'
+                            ' characters. When marking a task done, record the outcome here.',
                     ),
                     dependency_id: ToolParameterProperty.string(
-                        'The id of a task this task should depend on'
+                        'The id of a task this task should depend on. Mutually exclusive with status ' +
+                            'and remove_dependency_id.',
+                    ),
+                    remove_dependency_id: ToolParameterProperty.string(
+                        'The id of a dependency to remove from this task. Mutually exclusive with ' +
+                            'status and dependency_id.',
                     ),
                     title: ToolParameterProperty.string(
                         'New title. Must be non-empty and at most ' +
                             pool.config.maxTitleLength +
-                            ' characters.'
+                            ' characters.',
                     ),
                     description: ToolParameterProperty.string(
                         'New description. Must be non-empty and at most ' +
                             pool.config.maxDescriptionLength +
-                            ' characters.'
+                            ' characters.',
                     ),
                     milestone: ToolParameterProperty.string(
                         'New identifier-style milestone label: printable ASCII without whitespace, ' +
                             'at most ' +
                             pool.config.maxMilestoneLength +
-                            ' characters. Pass an empty string to clear the milestone.'
+                            ' characters. Pass an empty string to clear the milestone.',
                     ),
                     acceptance_criteria: ToolParameterProperty.array(
                         'New acceptance criteria list. Replaces the whole array. At most ' +
                             pool.config.maxAcceptanceCriteriaCount +
                             ' items, each at most ' +
                             pool.config.maxAcceptanceCriteriaLength +
-                            ' characters.'
+                            ' characters.',
                     ),
                     steps: ToolParameterProperty.array(
                         'New steps list. Replaces the whole array. At most ' +
                             pool.config.maxPlanFieldCount +
                             ' items, each at most ' +
                             pool.config.maxPlanFieldLength +
-                            ' characters.'
+                            ' characters.',
                     ),
                     context: ToolParameterProperty.array(
                         'New context list. Replaces the whole array. At most ' +
                             pool.config.maxPlanFieldCount +
                             ' items, each at most ' +
                             pool.config.maxPlanFieldLength +
-                            ' characters.'
+                            ' characters.',
                     ),
                     constraints: ToolParameterProperty.array(
                         'New constraints list. Replaces the whole array. At most ' +
                             pool.config.maxPlanFieldCount +
                             ' items, each at most ' +
                             pool.config.maxPlanFieldLength +
-                            ' characters.'
+                            ' characters.',
                     ),
                     out_of_scope: ToolParameterProperty.array(
                         'New out-of-scope list. Replaces the whole array. At most ' +
                             pool.config.maxPlanFieldCount +
                             ' items, each at most ' +
                             pool.config.maxPlanFieldLength +
-                            ' characters.'
+                            ' characters.',
                     ),
                     verification: ToolParameterProperty.array(
                         'New verification list. Replaces the whole array. At most ' +
                             pool.config.maxPlanFieldCount +
                             ' items, each at most ' +
                             pool.config.maxPlanFieldLength +
-                            ' characters.'
+                            ' characters.',
                     ),
                     edge_cases: ToolParameterProperty.array(
                         'New edge-cases list. Replaces the whole array. At most ' +
                             pool.config.maxPlanFieldCount +
                             ' items, each at most ' +
                             pool.config.maxPlanFieldLength +
-                            ' characters.'
+                            ' characters.',
                     ),
                     priority: ToolParameterProperty.string(
-                        'New priority: low, medium or high. Omit to leave unchanged.'
+                        'New priority: low, medium or high. Omit to leave unchanged.',
                     ),
                     type: ToolParameterProperty.string(
-                        'New type: feature, bug, refactor, chore or research. Omit to leave unchanged.'
+                        'New type: feature, bug, refactor, chore or research. Omit to leave unchanged.',
                     ),
                     links: ToolParameterProperty.array(
                         'New links list. Replaces the whole array. At most ' +
                             pool.config.maxLinksPerTask +
-                            ' items, each a valid URL.'
-                    )
+                            ' items, each a valid URL.',
+                    ),
                 },
-                ['id']
-            )
+                ['id'],
+            ),
         );
         this.pool = pool;
     }
@@ -133,7 +142,7 @@ export class UpdateTaskTool extends Tool {
         if (args.id === undefined || typeof args.id !== 'string') {
             return {
                 result: "Required parameter 'id' is missing or not a string",
-                status: ResultStatus.Error
+                status: ResultStatus.Error,
             };
         }
         const status = typeof args.status === 'string' ? args.status : undefined;
@@ -141,7 +150,7 @@ export class UpdateTaskTool extends Tool {
             if (status === 'pending') {
                 return {
                     result: "Status 'pending' is derived automatically and cannot be set directly",
-                    status: ResultStatus.Error
+                    status: ResultStatus.Error,
                 };
             }
             return {
@@ -150,15 +159,29 @@ export class UpdateTaskTool extends Tool {
                     status +
                     "'. Allowed values: " +
                     SETTABLE_STATUSES.join(', '),
-                status: ResultStatus.Error
+                status: ResultStatus.Error,
             };
         }
         const dependencyId =
             typeof args.dependency_id === 'string' ? args.dependency_id : undefined;
+        const removeDependencyId =
+            typeof args.remove_dependency_id === 'string' ? args.remove_dependency_id : undefined;
         if (status !== undefined && dependencyId !== undefined) {
             return {
                 result: "Parameters 'status' and 'dependency_id' are mutually exclusive",
-                status: ResultStatus.Error
+                status: ResultStatus.Error,
+            };
+        }
+        if (status !== undefined && removeDependencyId !== undefined) {
+            return {
+                result: "Parameters 'status' and 'remove_dependency_id' are mutually exclusive",
+                status: ResultStatus.Error,
+            };
+        }
+        if (dependencyId !== undefined && removeDependencyId !== undefined) {
+            return {
+                result: "Parameters 'dependency_id' and 'remove_dependency_id' are mutually exclusive",
+                status: ResultStatus.Error,
             };
         }
         const idResolution = resolveExactOrError(this.pool, args.id);
@@ -166,7 +189,7 @@ export class UpdateTaskTool extends Tool {
             return idResolution.error;
         }
         const resolvedId = idResolution.task.id;
-        let resolvedDependencyId: string | undefined;
+        let resolvedDependencyId: UUID | undefined;
         if (dependencyId !== undefined) {
             const depResolution = resolveExactOrError(this.pool, dependencyId);
             if (!depResolution.ok) {
@@ -174,8 +197,21 @@ export class UpdateTaskTool extends Tool {
             }
             resolvedDependencyId = depResolution.task.id;
         }
+        let resolvedRemoveDependencyId: UUID | undefined;
+        if (removeDependencyId !== undefined) {
+            const depResolution = resolveExactOrError(this.pool, removeDependencyId);
+            if (!depResolution.ok) {
+                return depResolution.error;
+            }
+            resolvedRemoveDependencyId = depResolution.task.id;
+        }
         try {
-            const changes = this.toUpdateTaskInput(args, status, resolvedDependencyId);
+            const changes = this.toUpdateTaskInput(
+                args,
+                status,
+                resolvedDependencyId,
+                resolvedRemoveDependencyId,
+            );
             const task = await this.pool.updateTask(resolvedId, changes);
             const parts = ['Task updated with id: ' + resolvedId + ', status: ' + task.status];
             if (changes.title !== undefined) {
@@ -223,6 +259,9 @@ export class UpdateTaskTool extends Tool {
             if (changes.addDependency !== undefined) {
                 parts.push('now depends on ' + changes.addDependency);
             }
+            if (changes.removeDependency !== undefined) {
+                parts.push('no longer depends on ' + changes.removeDependency);
+            }
             return { result: parts.join(', '), status: ResultStatus.Success };
         } catch (e) {
             return { result: (e as Error).message, status: ResultStatus.Error };
@@ -232,7 +271,8 @@ export class UpdateTaskTool extends Tool {
     private toUpdateTaskInput(
         args: Record<string, unknown>,
         status: string | undefined,
-        dependencyId: string | undefined
+        dependencyId: UUID | undefined,
+        removeDependencyId: UUID | undefined,
     ): UpdateTaskInput {
         const changes: UpdateTaskInput = {};
         if (status !== undefined) {
@@ -243,6 +283,9 @@ export class UpdateTaskTool extends Tool {
         }
         if (dependencyId !== undefined) {
             changes.addDependency = dependencyId;
+        }
+        if (removeDependencyId !== undefined) {
+            changes.removeDependency = removeDependencyId;
         }
         if (typeof args.title === 'string') {
             changes.title = args.title;

@@ -48,7 +48,8 @@ Structured plan fields (all optional except title):
 - links - reference URLs
 
 Manage tasks with the create_task, read_task and update_task tools; read_task
-filters listings by status, priority, type and milestone. Tasks never
-throw: errors are returned as result strings.`;
+filters listings by status, priority, type and milestone, and update_task can
+add a dependency (dependency_id) or remove one (remove_dependency_id). Tasks
+never throw: errors are returned as result strings.`;
     }
 }

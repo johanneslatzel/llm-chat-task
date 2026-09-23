@@ -81,7 +81,7 @@ describe('TaskPool store backend', () => {
             const idB = 'aaaaaaaa-2222-4222-8222-222222222222';
             await store.set(makeTask({ id: idA, title: 'A' }));
             await store.set(
-                makeTask({ id: idB, title: 'B', status: 'pending', dependencies: [idA] })
+                makeTask({ id: idB, title: 'B', status: 'pending', dependencies: [idA] }),
             );
 
             const pool = await TaskPool.create(new TaskConfiguration({ dir }));
@@ -103,8 +103,8 @@ describe('TaskPool store backend', () => {
                 makeTask({
                     id: idA,
                     title: 'A',
-                    dependencies: ['bbbbbbbb-0000-0000-0000-000000000000']
-                })
+                    dependencies: ['bbbbbbbb-0000-0000-0000-000000000000'],
+                }),
             );
             const pool = await TaskPool.create(new TaskConfiguration({ dir }));
             expect(pool.getTask(idA)!.dependencies).toEqual([]);
@@ -122,10 +122,10 @@ describe('TaskPool store backend', () => {
                 title: 'X',
                 status: 'finished',
                 history: '',
-                dependencies: []
+                dependencies: [],
             } as unknown as Task);
             await expect(
-                TaskPool.create(new TaskConfiguration({ dir: badStatusDir }))
+                TaskPool.create(new TaskConfiguration({ dir: badStatusDir })),
             ).rejects.toThrow('Invalid task status in store');
         } finally {
             await rm(badStatusDir, { recursive: true, force: true });
@@ -138,10 +138,10 @@ describe('TaskPool store backend', () => {
                 id: 'aaaaaaaa-1111-4111-8111-111111111111',
                 history: '',
                 status: 'ready',
-                dependencies: []
+                dependencies: [],
             } as unknown as Task);
             await expect(
-                TaskPool.create(new TaskConfiguration({ dir: badTitleDir }))
+                TaskPool.create(new TaskConfiguration({ dir: badTitleDir })),
             ).rejects.toThrow('Invalid task title in store');
         } finally {
             await rm(badTitleDir, { recursive: true, force: true });
@@ -155,10 +155,10 @@ describe('TaskPool store backend', () => {
                 title: 'X',
                 status: 'ready',
                 history: 42,
-                dependencies: []
+                dependencies: [],
             } as unknown as Task);
             await expect(
-                TaskPool.create(new TaskConfiguration({ dir: badHistoryDir }))
+                TaskPool.create(new TaskConfiguration({ dir: badHistoryDir })),
             ).rejects.toThrow('Invalid task history in store');
         } finally {
             await rm(badHistoryDir, { recursive: true, force: true });
@@ -173,11 +173,11 @@ describe('TaskPool store backend', () => {
                 makeTask({
                     id: 'aaaaaaaa-1111-4111-8111-111111111111',
                     title: 'X',
-                    description: 'z'.repeat(501)
-                })
+                    description: 'z'.repeat(501),
+                }),
             );
             await expect(TaskPool.create(new TaskConfiguration({ dir }))).rejects.toThrow(
-                'Description must be at most 500 characters'
+                'Description must be at most 500 characters',
             );
         } finally {
             await rm(dir, { recursive: true, force: true });

@@ -8,7 +8,7 @@ export {
     DEFAULT_MAX_PLAN_FIELD_LENGTH,
     DEFAULT_MAX_HISTORY_LENGTH,
     DEFAULT_HISTORY_PREVIEW_LENGTH,
-    MIN_ID_PREFIX_LENGTH
+    MIN_ID_PREFIX_LENGTH,
 } from './constants.js';
 export { TaskConfiguration } from './lib/config.js';
 export type { Task, TaskStatus, TaskPriority, TaskType, PlanField } from './types.js';

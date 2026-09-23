@@ -9,7 +9,7 @@ import {
     DEFAULT_MAX_PLAN_FIELD_COUNT,
     DEFAULT_MAX_PLAN_FIELD_LENGTH,
     DEFAULT_MAX_TITLE_LENGTH,
-    DEFAULT_HISTORY_PREVIEW_LENGTH
+    DEFAULT_HISTORY_PREVIEW_LENGTH,
 } from '../../src/constants.js';
 import { TaskConfiguration } from '../../src/lib/config.js';
 
@@ -24,7 +24,7 @@ const ENV_KEYS = [
     'LLM_CHAT_TASK_MAX_PLAN_FIELD_COUNT',
     'LLM_CHAT_TASK_MAX_PLAN_FIELD_LENGTH',
     'LLM_CHAT_TASK_MAX_HISTORY_LENGTH',
-    'LLM_CHAT_TASK_HISTORY_PREVIEW_LENGTH'
+    'LLM_CHAT_TASK_HISTORY_PREVIEW_LENGTH',
 ] as const;
 
 describe('TaskConfiguration', () => {
@@ -82,7 +82,7 @@ describe('TaskConfiguration', () => {
             maxPlanFieldCount: 7,
             maxPlanFieldLength: 8,
             maxHistoryLength: 100,
-            historyPreviewLength: 10
+            historyPreviewLength: 10,
         });
         expect(config.maxTitleLength).toBe(20);
         expect(config.maxDescriptionLength).toBe(30);

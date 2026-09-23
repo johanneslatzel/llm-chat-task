@@ -136,7 +136,7 @@ describe('UpdateTaskTool', () => {
             constraints: ['x1'],
             out_of_scope: ['o1'],
             verification: ['v1'],
-            edge_cases: ['e1']
+            edge_cases: ['e1'],
         });
         expect(result[0]!.status).toBe(ResultStatus.Success);
         expect(result[0]!.result).toContain('acceptance criteria updated');
@@ -210,7 +210,7 @@ describe('UpdateTaskTool', () => {
         expect(badPriority[0]!.result).toContain('Invalid priority');
         const tooMany = await tool.execute({
             id,
-            acceptance_criteria: Array.from({ length: 11 }, () => 'c')
+            acceptance_criteria: Array.from({ length: 11 }, () => 'c'),
         });
         expect(tooMany[0]!.status).toBe(ResultStatus.Error);
         expect(tooMany[0]!.result).toContain('Acceptance criteria must have at most 10 items');
@@ -279,7 +279,7 @@ describe('UpdateTaskTool', () => {
             milestone: {},
             priority: [],
             acceptance_criteria: 'nope',
-            steps: 0
+            steps: 0,
         });
         expect(result[0]!.status).toBe(ResultStatus.Success);
         expect(result[0]!.result).toContain('status: ready');
@@ -335,14 +335,14 @@ describe('UpdateTaskTool', () => {
                 title: 'A',
                 history: '',
                 status: 'ready',
-                dependencies: []
+                dependencies: [],
             });
             await store.set({
                 id: 'aaaaaaaa-2222-4222-8222-222222222222',
                 title: 'B',
                 history: '',
                 status: 'ready',
-                dependencies: []
+                dependencies: [],
             });
             const tool = new UpdateTaskTool(await TaskPool.create(new TaskConfiguration({ dir })));
             const ambiguous = await tool.execute({ id: 'aaaaaaaa', status: 'done' });
@@ -370,21 +370,21 @@ describe('UpdateTaskTool', () => {
                 title: 'Target',
                 history: '',
                 status: 'ready',
-                dependencies: []
+                dependencies: [],
             });
             await store.set({
                 id: 'aaaaaaaa-1111-4111-8111-111111111111',
                 title: 'A',
                 history: '',
                 status: 'ready',
-                dependencies: []
+                dependencies: [],
             });
             await store.set({
                 id: 'aaaaaaaa-2222-4222-8222-222222222222',
                 title: 'B',
                 history: '',
                 status: 'ready',
-                dependencies: []
+                dependencies: [],
             });
             const pool = await TaskPool.create(new TaskConfiguration({ dir }));
             const tool = new UpdateTaskTool(pool);

@@ -3,7 +3,7 @@ import {
     ResultStatus,
     Tool,
     ToolParameterProperty,
-    ToolParameters
+    ToolParameters,
 } from '@johannes.latzel/llm-chat';
 import { MIN_ID_PREFIX_LENGTH } from '../constants.js';
 import { PRIORITIES, STATUSES, STRING_ARRAY_FIELDS, TYPES } from '../lib/fields.js';
@@ -36,35 +36,35 @@ export class ReadTaskTool extends Tool {
                 id: ToolParameterProperty.string(
                     'The id of the task to read; a shortened id of at least ' +
                         MIN_ID_PREFIX_LENGTH +
-                        ' characters resolves when unique'
+                        ' characters resolves when unique',
                 ),
                 query: ToolParameterProperty.string(
                     'JavaScript regex to search task fields (case-insensitive). Matches against title, ' +
                         'description, id, history and every string-array item; results include matchedFields ' +
-                        'naming what matched. Mutually exclusive with id.'
+                        'naming what matched. Mutually exclusive with id.',
                 ),
                 strict: ToolParameterProperty.boolean(
                     'When true (default), query is compiled with the Unicode "u" flag, which rejects legacy ' +
                         'escape sequences like \\" that LLMs often produce. Set strict=false to allow such ' +
-                        'escapes (the pattern is then compiled with only the "i" flag).'
+                        'escapes (the pattern is then compiled with only the "i" flag).',
                 ),
                 available: ToolParameterProperty.boolean(
-                    'When true, list only tasks that have no unfinished dependencies and are not done'
+                    'When true, list only tasks that have no unfinished dependencies and are not done',
                 ),
                 status: ToolParameterProperty.string(
-                    'When listing, keep only tasks with this status: ' + STATUSES.join(', ')
+                    'When listing, keep only tasks with this status: ' + STATUSES.join(', '),
                 ),
                 priority: ToolParameterProperty.string(
-                    'When listing, keep only tasks with this priority: ' + PRIORITIES.join(', ')
+                    'When listing, keep only tasks with this priority: ' + PRIORITIES.join(', '),
                 ),
                 type: ToolParameterProperty.string(
-                    'When listing, keep only tasks with this type: ' + TYPES.join(', ')
+                    'When listing, keep only tasks with this type: ' + TYPES.join(', '),
                 ),
                 milestone: ToolParameterProperty.string(
                     'When listing, keep only tasks whose milestone equals this value exactly ' +
-                        '(compared after trimming)'
-                )
-            })
+                        '(compared after trimming)',
+                ),
+            }),
         );
         this.pool = pool;
     }
@@ -80,13 +80,13 @@ export class ReadTaskTool extends Tool {
         if (id !== undefined && available !== undefined) {
             return {
                 result: "Parameters 'id' and 'available' are mutually exclusive",
-                status: ResultStatus.Error
+                status: ResultStatus.Error,
             };
         }
         if (id !== undefined && rawQuery !== undefined) {
             return {
                 result: "Parameters 'id' and 'query' are mutually exclusive",
-                status: ResultStatus.Error
+                status: ResultStatus.Error,
             };
         }
         const compiled = this.compileQuery(rawQuery, strict);
@@ -100,7 +100,7 @@ export class ReadTaskTool extends Tool {
             }
             return {
                 result: JSON.stringify(this.serialize(resolved.task, false), null, 2),
-                status: ResultStatus.Success
+                status: ResultStatus.Success,
             };
         }
         const statusFilter = typeof args.status === 'string' ? args.status : undefined;
@@ -128,9 +128,9 @@ export class ReadTaskTool extends Tool {
             result: JSON.stringify(
                 entries.map((e) => this.serialize(e.task, true, e.matchedFields)),
                 null,
-                2
+                2,
             ),
-            status: ResultStatus.Success
+            status: ResultStatus.Success,
         };
     }
 
@@ -140,7 +140,7 @@ export class ReadTaskTool extends Tool {
      */
     private compileQuery(
         raw: string | undefined,
-        strict: boolean
+        strict: boolean,
     ): { ok: true; regex?: RegExp } | { ok: false; error: PartialToolResult } {
         if (raw === undefined) {
             return { ok: true };
@@ -155,8 +155,8 @@ export class ReadTaskTool extends Tool {
                 ok: false,
                 error: {
                     result: 'Invalid query regex: ' + (e as Error).message + hint,
-                    status: ResultStatus.Error
-                }
+                    status: ResultStatus.Error,
+                },
             };
         }
     }
@@ -187,7 +187,7 @@ export class ReadTaskTool extends Tool {
         const milestone = typeof args.milestone === 'string' ? args.milestone.trim() : undefined;
         if (status !== undefined && !this.isStatus(status)) {
             throw new Error(
-                "Invalid status filter '" + status + "'. Allowed values: " + STATUSES.join(', ')
+                "Invalid status filter '" + status + "'. Allowed values: " + STATUSES.join(', '),
             );
         }
         if (priority !== undefined && !this.isPriority(priority)) {
@@ -195,12 +195,12 @@ export class ReadTaskTool extends Tool {
                 "Invalid priority filter '" +
                     priority +
                     "'. Allowed values: " +
-                    PRIORITIES.join(', ')
+                    PRIORITIES.join(', '),
             );
         }
         if (type !== undefined && !this.isType(type)) {
             throw new Error(
-                "Invalid type filter '" + type + "'. Allowed values: " + TYPES.join(', ')
+                "Invalid type filter '" + type + "'. Allowed values: " + TYPES.join(', '),
             );
         }
         return tasks.filter(
@@ -208,7 +208,7 @@ export class ReadTaskTool extends Tool {
                 (status === undefined || t.status === status) &&
                 (priority === undefined || t.priority === priority) &&
                 (type === undefined || t.type === type) &&
-                (milestone === undefined || t.milestone === milestone)
+                (milestone === undefined || t.milestone === milestone),
         );
     }
 
@@ -232,7 +232,7 @@ export class ReadTaskTool extends Tool {
             history: previewArrays ? this.preview(task.history) : task.history,
             dependencies: task.dependencies,
             unfinishedDependencies: this.pool.getUnfinishedDependencyIds(task.id),
-            ...(matchedFields !== undefined ? { matchedFields } : {})
+            ...(matchedFields !== undefined ? { matchedFields } : {}),
         };
     }
 

@@ -3,7 +3,7 @@ import {
     ResultStatus,
     Tool,
     ToolParameterProperty,
-    ToolParameters
+    ToolParameters,
 } from '@johannes.latzel/llm-chat';
 import { applyStructuredFields } from '../lib/fields.js';
 import { CreateTaskInput, TaskPool } from '../pool.js';
@@ -24,82 +24,82 @@ export class CreateTaskTool extends Tool {
                     title: ToolParameterProperty.string(
                         'Short, specific, imperative title for the task. Required; at most ' +
                             pool.config.maxTitleLength +
-                            ' characters.'
+                            ' characters.',
                     ),
                     description: ToolParameterProperty.string(
                         'What to do and why: the goal, including current vs expected behavior where relevant. At most ' +
                             pool.config.maxDescriptionLength +
-                            ' characters.'
+                            ' characters.',
                     ),
                     milestone: ToolParameterProperty.string(
                         'Optional identifier-style grouping label tying the task to a milestone, e.g. ' +
                             'release-2026-q3. Printable ASCII without whitespace, at most ' +
                             pool.config.maxMilestoneLength +
-                            ' characters; an empty or whitespace-only value stores no milestone.'
+                            ' characters; an empty or whitespace-only value stores no milestone.',
                     ),
                     acceptance_criteria: ToolParameterProperty.array(
                         'Testable definition of done. Each item must have an unambiguous pass/fail outcome; use Given/When/Then scenarios or a checklist. At most ' +
                             pool.config.maxAcceptanceCriteriaCount +
                             ' items, each at most ' +
                             pool.config.maxAcceptanceCriteriaLength +
-                            ' characters.'
+                            ' characters.',
                     ),
                     steps: ToolParameterProperty.array(
                         'Ordered execution steps, one concrete action per item. At most ' +
                             pool.config.maxPlanFieldCount +
                             ' items, each at most ' +
                             pool.config.maxPlanFieldLength +
-                            ' characters.'
+                            ' characters.',
                     ),
                     context: ToolParameterProperty.array(
                         'Relevant files, entry points, existing patterns, and architectural decisions the executor cannot infer from the code. At most ' +
                             pool.config.maxPlanFieldCount +
                             ' items, each at most ' +
                             pool.config.maxPlanFieldLength +
-                            ' characters.'
+                            ' characters.',
                     ),
                     constraints: ToolParameterProperty.array(
                         'Rules that must hold: must-do and must-not-do guardrails. At most ' +
                             pool.config.maxPlanFieldCount +
                             ' items, each at most ' +
                             pool.config.maxPlanFieldLength +
-                            ' characters.'
+                            ' characters.',
                     ),
                     out_of_scope: ToolParameterProperty.array(
                         'Work explicitly excluded so the executor does not over-reach. At most ' +
                             pool.config.maxPlanFieldCount +
                             ' items, each at most ' +
                             pool.config.maxPlanFieldLength +
-                            ' characters.'
+                            ' characters.',
                     ),
                     verification: ToolParameterProperty.array(
                         'Commands or checks that confirm the work is complete. At most ' +
                             pool.config.maxPlanFieldCount +
                             ' items, each at most ' +
                             pool.config.maxPlanFieldLength +
-                            ' characters.'
+                            ' characters.',
                     ),
                     edge_cases: ToolParameterProperty.array(
                         'Known pitfalls, footguns, and edge conditions to watch for. At most ' +
                             pool.config.maxPlanFieldCount +
                             ' items, each at most ' +
                             pool.config.maxPlanFieldLength +
-                            ' characters.'
+                            ' characters.',
                     ),
                     priority: ToolParameterProperty.string(
-                        'Stated importance: low, medium or high. Defaults to low when omitted.'
+                        'Stated importance: low, medium or high. Defaults to low when omitted.',
                     ),
                     type: ToolParameterProperty.string(
-                        'Kind of work: feature, bug, refactor, chore or research.'
+                        'Kind of work: feature, bug, refactor, chore or research.',
                     ),
                     links: ToolParameterProperty.array(
                         'Reference URLs such as docs, issues, or designs. At most ' +
                             pool.config.maxLinksPerTask +
-                            ' items, each a valid URL.'
-                    )
+                            ' items, each a valid URL.',
+                    ),
                 },
-                ['title']
-            )
+                ['title'],
+            ),
         );
         this.pool = pool;
     }
@@ -108,7 +108,7 @@ export class CreateTaskTool extends Tool {
         if (args.title === undefined || typeof args.title !== 'string') {
             return {
                 result: "Required parameter 'title' is missing or not a string",
-                status: ResultStatus.Error
+                status: ResultStatus.Error,
             };
         }
         try {
@@ -116,7 +116,7 @@ export class CreateTaskTool extends Tool {
             const taskId = await this.pool.createTask(input);
             return {
                 result: 'Task created with id: ' + taskId,
-                status: ResultStatus.Success
+                status: ResultStatus.Success,
             };
         } catch (e) {
             return { result: (e as Error).message, status: ResultStatus.Error };

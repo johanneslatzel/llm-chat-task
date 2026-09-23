@@ -8,7 +8,7 @@ import {
     DEFAULT_MAX_PLAN_FIELD_COUNT,
     DEFAULT_MAX_PLAN_FIELD_LENGTH,
     DEFAULT_MAX_TITLE_LENGTH,
-    DEFAULT_HISTORY_PREVIEW_LENGTH
+    DEFAULT_HISTORY_PREVIEW_LENGTH,
 } from '../constants.js';
 import { envInt } from '../env.js';
 
@@ -68,14 +68,14 @@ export class TaskConfiguration {
             envInt(
                 'LLM_CHAT_TASK_MAX_ACCEPTANCE_CRITERIA_COUNT',
                 DEFAULT_MAX_ACCEPTANCE_CRITERIA_COUNT,
-                1
+                1,
             );
         this.maxAcceptanceCriteriaLength =
             options?.maxAcceptanceCriteriaLength ??
             envInt(
                 'LLM_CHAT_TASK_MAX_ACCEPTANCE_CRITERIA_LENGTH',
                 DEFAULT_MAX_ACCEPTANCE_CRITERIA_LENGTH,
-                1
+                1,
             );
         this.maxLinksPerTask =
             options?.maxLinksPerTask ??

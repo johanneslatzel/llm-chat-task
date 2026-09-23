@@ -27,7 +27,7 @@ A task carries the following fields:
 | `description`        | string (optional)                                            | The goal: what to do and why. At most `maxDescriptionLength` (default 500).                                                                                                           |
 | `milestone`          | string (optional)                                            | Identifier-style grouping label, e.g. `release-2026-q3`. Printable ASCII without whitespace, at most `maxMilestoneLength` (default 64); empty or whitespace-only stores no milestone. |
 | `acceptanceCriteria` | string[] (optional)                                          | Testable definition of done. At most `maxAcceptanceCriteriaCount` (default 10) items of `maxAcceptanceCriteriaLength` (default 200) characters each.                                  |
-| `priority`           | `low \| medium \| high` (optional)                           | Stated importance. `createTask` defaults it to `low` when omitted; absence only occurs on tasks loaded from a store that recorded no priority.                                      |
+| `priority`           | `low \| medium \| high` (optional)                           | Stated importance. `createTask` defaults it to `low` when omitted; absence only occurs on tasks loaded from a store that recorded no priority.                                        |
 | `type`               | `feature \| bug \| refactor \| chore \| research` (optional) | Kind of work.                                                                                                                                                                         |
 | `links`              | string[] (optional)                                          | Reference URLs. At most `maxLinksPerTask` (default 20), each a valid URL.                                                                                                             |
 | `steps`              | string[] (optional)                                          | Ordered execution plan.                                                                                                                                                               |
@@ -53,7 +53,7 @@ const id = await pool.createTask({
     priority: 'high',
     type: 'feature',
     steps: ['Add ValidatePhone', 'Add table-driven tests', 'Run npm run verify'],
-    verification: ['npm run verify']
+    verification: ['npm run verify'],
 });
 await pool.updateTask(id, { status: 'done', history: 'Result data' });
 ```
@@ -99,18 +99,19 @@ An omitted `priority` defaults to `low`.
 
 `changes` may contain any of:
 
-| Field                                                                        | Type                                 | Description                                                                                                                                                                                                       |
-| ---------------------------------------------------------------------------- | ------------------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `status`                                                                     | `'ready' \| 'in_progress' \| 'done'` | Sets the task status. `pending` is derived and rejected. Setting a status while dependencies are unfinished is rejected.                                                                                          |
-| `history`                                                                    | string                               | Appends a timestamped entry (`[<ISO timestamp>] <text>`) to the task's progress log. Entries accumulate newline-separated; appending beyond the `maxHistoryLength` cap is rejected and the log is left unchanged. |
-| `addDependency`                                                              | string                               | Id of a task to add as a dependency. Rejects missing ids, self-dependencies, duplicates, cycles, and any dependency on a task that is `in_progress` or `done`; unfinished dependencies set the task to `pending`. |
-| `title`                                                                      | string                               | Replaces the title. Must be non-empty and at most `maxTitleLength`.                                                                                                                                               |
-| `description`                                                                | string                               | Replaces the description. Must be non-empty and at most `maxDescriptionLength`.                                                                                                                                   |
-| `milestone`                                                                  | string                               | Replaces the milestone (printable ASCII without whitespace, at most `maxMilestoneLength`); empty or whitespace-only clears it.                                                                                    |
-| `acceptanceCriteria`                                                         | string[]                             | Replaces the whole array (validated like create).                                                                                                                                                                 |
-| `priority` / `type`                                                          | enum                                 | Replaces the value.                                                                                                                                                                                               |
-| `links`                                                                      | string[]                             | Replaces the whole array (validated like create).                                                                                                                                                                 |
-| `steps`, `constraints`, `outOfScope`, `verification`, `context`, `edgeCases` | string[]                             | Replace the whole array (validated like create).                                                                                                                                                                  |
+| Field                                                                        | Type                                 | Description                                                                                                                                                                                                                                                                                                                |
+| ---------------------------------------------------------------------------- | ------------------------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `status`                                                                     | `'ready' \| 'in_progress' \| 'done'` | Sets the task status. `pending` is derived and rejected. Setting a status while dependencies are unfinished is rejected.                                                                                                                                                                                                   |
+| `history`                                                                    | string                               | Appends a timestamped entry (`[<ISO timestamp>] <text>`) to the task's progress log. Entries accumulate newline-separated; appending beyond the `maxHistoryLength` cap is rejected and the log is left unchanged.                                                                                                          |
+| `addDependency`                                                              | string (UUID)                        | Full UUID of a task to add as a dependency; shortened ids are resolved by the caller. Rejects malformed ids, missing ids, self-dependencies, duplicates, cycles, and any dependency on a task that is `in_progress` or `done`; unfinished dependencies set the task to `pending`.                                          |
+| `removeDependency`                                                           | string (UUID)                        | Full UUID of a dependency to remove. Rejects malformed ids and ids the task does not currently depend on. Removing is always allowed, including on `in_progress` and `done` tasks, and a `pending` task whose last unfinished dependency is removed becomes `ready`. Mutually exclusive with `status` and `addDependency`. |
+| `title`                                                                      | string                               | Replaces the title. Must be non-empty and at most `maxTitleLength`.                                                                                                                                                                                                                                                        |
+| `description`                                                                | string                               | Replaces the description. Must be non-empty and at most `maxDescriptionLength`.                                                                                                                                                                                                                                            |
+| `milestone`                                                                  | string                               | Replaces the milestone (printable ASCII without whitespace, at most `maxMilestoneLength`); empty or whitespace-only clears it.                                                                                                                                                                                             |
+| `acceptanceCriteria`                                                         | string[]                             | Replaces the whole array (validated like create).                                                                                                                                                                                                                                                                          |
+| `priority` / `type`                                                          | enum                                 | Replaces the value.                                                                                                                                                                                                                                                                                                        |
+| `links`                                                                      | string[]                             | Replaces the whole array (validated like create).                                                                                                                                                                                                                                                                          |
+| `steps`, `constraints`, `outOfScope`, `verification`, `context`, `edgeCases` | string[]                             | Replace the whole array (validated like create).                                                                                                                                                                                                                                                                           |
 
 All validation happens before any change is applied; a rejected update never
 partially modifies the task.
@@ -184,7 +185,7 @@ tasks that are not done.
 | Parameter   | Type    | Required | Description                                                                                                                                                                                                                                                                                            |
 | ----------- | ------- | -------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
 | `id`        | string  | no       | The id of the task to read. A shortened id of at least `MIN_ID_PREFIX_LENGTH` (default 8) characters is accepted when it matches exactly one task; an exact full-id match always wins. Ambiguous prefixes are rejected with the list of matching ids. Mutually exclusive with `available` and `query`. |
-| `query`     | string  | no       | JavaScript regex matched case-insensitively against title, description, id, history, milestone and every string-array item. Mutually exclusive with `id`; composes with `available`, `status`, `priority` and `type`. A whitespace-only query is ignored.                                                         |
+| `query`     | string  | no       | JavaScript regex matched case-insensitively against title, description, id, history, milestone and every string-array item. Mutually exclusive with `id`; composes with `available`, `status`, `priority` and `type`. A whitespace-only query is ignored.                                              |
 | `strict`    | boolean | no       | When true (default), `query` is compiled with the Unicode `u` flag, which rejects legacy escape sequences like `\"`. Set false to allow such escapes (the pattern is then compiled with only the `i` flag).                                                                                            |
 | `available` | boolean | no       | When true, list only tasks with no unfinished dependencies that are not done. Mutually exclusive with `id`.                                                                                                                                                                                            |
 | `status`    | string  | no       | Filter listings by status (`pending`, `ready`, `in_progress`, `done`).                                                                                                                                                                                                                                 |
@@ -204,37 +205,39 @@ return an error.
 ## update_task
 
 Updates a task: sets its status, refines any structured field, appends to its
-progress log, and/or adds a dependency. The tool description instructs the
-caller to record a completion summary in `history` when marking a task done.
+progress log, and/or adds or removes a dependency. The tool description
+instructs the caller to record a completion summary in `history` when marking a
+task done.
 
 **Parameters:**
 
-| Parameter             | Type     | Required | Description                                                                                                                                                       |
-| --------------------- | -------- | -------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `id`                  | string   | yes      | The id of the task to update. A shortened id of at least 8 characters is accepted when it matches exactly one task; success messages echo the resolved full UUID. |
-| `status`              | string   | no       | `ready`, `in_progress` or `done`. `pending` is derived automatically. Mutually exclusive with `dependency_id`.                                                    |
-| `history`             | string   | no       | Appends a timestamped entry to the task's progress log (capped at `maxHistoryLength` characters, default 10,000).                                                 |
-| `dependency_id`       | string   | no       | The id of a task this task should depend on; shortened ids are accepted like `id`. Mutually exclusive with `status`.                                              |
-| `title`               | string   | no       | New title (non-empty, at most `maxTitleLength`).                                                                                                                  |
-| `description`         | string   | no       | New description (non-empty, at most `maxDescriptionLength`).                                                                                                      |
-| `milestone`           | string   | no       | New identifier-style milestone label (printable ASCII without whitespace, at most `maxMilestoneLength`); an empty string clears the milestone.                    |
-| `acceptance_criteria` | string[] | no       | New acceptance criteria list; replaces the whole array.                                                                                                           |
-| `steps`               | string[] | no       | New steps list; replaces the whole array.                                                                                                                         |
-| `context`             | string[] | no       | New context list; replaces the whole array.                                                                                                                       |
-| `constraints`         | string[] | no       | New constraints list; replaces the whole array.                                                                                                                   |
-| `out_of_scope`        | string[] | no       | New out-of-scope list; replaces the whole array.                                                                                                                  |
-| `verification`        | string[] | no       | New verification list; replaces the whole array.                                                                                                                  |
-| `edge_cases`          | string[] | no       | New edge-cases list; replaces the whole array.                                                                                                                    |
-| `priority`            | string   | no       | New priority (`low`, `medium`, `high`).                                                                                                                           |
-| `type`                | string   | no       | New type (`feature`, `bug`, `refactor`, `chore`, `research`).                                                                                                     |
-| `links`               | string[] | no       | New links list; replaces the whole array.                                                                                                                         |
+| Parameter              | Type     | Required | Description                                                                                                                                                       |
+| ---------------------- | -------- | -------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `id`                   | string   | yes      | The id of the task to update. A shortened id of at least 8 characters is accepted when it matches exactly one task; success messages echo the resolved full UUID. |
+| `status`               | string   | no       | `ready`, `in_progress` or `done`. `pending` is derived automatically. Mutually exclusive with `dependency_id` and `remove_dependency_id`.                         |
+| `history`              | string   | no       | Appends a timestamped entry to the task's progress log (capped at `maxHistoryLength` characters, default 10,000).                                                 |
+| `dependency_id`        | string   | no       | The id of a task this task should depend on; shortened ids are accepted like `id`. Mutually exclusive with `status` and `remove_dependency_id`.                   |
+| `remove_dependency_id` | string   | no       | The id of a dependency to remove from this task; shortened ids are accepted like `id`. Mutually exclusive with `status` and `dependency_id`.                      |
+| `title`                | string   | no       | New title (non-empty, at most `maxTitleLength`).                                                                                                                  |
+| `description`          | string   | no       | New description (non-empty, at most `maxDescriptionLength`).                                                                                                      |
+| `milestone`            | string   | no       | New identifier-style milestone label (printable ASCII without whitespace, at most `maxMilestoneLength`); an empty string clears the milestone.                    |
+| `acceptance_criteria`  | string[] | no       | New acceptance criteria list; replaces the whole array.                                                                                                           |
+| `steps`                | string[] | no       | New steps list; replaces the whole array.                                                                                                                         |
+| `context`              | string[] | no       | New context list; replaces the whole array.                                                                                                                       |
+| `constraints`          | string[] | no       | New constraints list; replaces the whole array.                                                                                                                   |
+| `out_of_scope`         | string[] | no       | New out-of-scope list; replaces the whole array.                                                                                                                  |
+| `verification`         | string[] | no       | New verification list; replaces the whole array.                                                                                                                  |
+| `edge_cases`           | string[] | no       | New edge-cases list; replaces the whole array.                                                                                                                    |
+| `priority`             | string   | no       | New priority (`low`, `medium`, `high`).                                                                                                                           |
+| `type`                 | string   | no       | New type (`feature`, `bug`, `refactor`, `chore`, `research`).                                                                                                     |
+| `links`                | string[] | no       | New links list; replaces the whole array.                                                                                                                         |
 
 **Returns:** `"Task updated with id: <id>, status: <status>"`, extended with a
 per-updated-field suffix (e.g. `", title updated"`, `", progress entry
-recorded"`, `", now depends on <id>"`). `<id>` is always the resolved full
-UUID, even when a shortened id was passed. Errors on unknown ids, too-short
-ids, ambiguous prefixes, invalid statuses, invalid field values, or dependency
-problems.
+recorded"`, `", now depends on <id>"`, `", no longer depends on <id>"`). `<id>`
+is always the resolved full UUID, even when a shortened id was passed. Errors on
+unknown ids, too-short ids, ambiguous prefixes, invalid statuses, invalid field
+values, or dependency problems.
 
 ### `resolveId(idOrPrefix)`
 
