@@ -39,5 +39,6 @@ describe('TaskToolPackage', () => {
         expect(tutorial).toContain('edge_cases');
         expect(tutorial).toContain('priority');
         expect(tutorial).toContain('type');
+        expect(tutorial).toContain('remove_dependency_id');
     });
 });

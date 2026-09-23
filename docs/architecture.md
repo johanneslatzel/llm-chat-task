@@ -69,9 +69,10 @@ fall back to the default (or clamp to 1).
 - `getUnfinishedDependencyIds(taskId)`: the dependency ids of a task that still block it
 - `updateTask(id, changes)`: sets a status (`ready`/`in_progress`/`done`),
   refines any structured field, appends a timestamped entry to the progress
-  log, and/or adds a dependency; rejects missing ids, self-dependencies,
-  duplicate dependencies, and any cycle, and refuses new dependencies on tasks
-  that are `in_progress` or `done`
+  log, and/or adds or removes a dependency; rejects missing ids,
+  self-dependencies, duplicate dependencies, and any cycle, refuses new
+  dependencies on tasks that are `in_progress` or `done`, and rejects removal
+  of an id the task does not depend on
 - `clear()`: resets the pool (also empties the backing store)
 
 The pool always has a backing {@link ObjectStore} from
@@ -140,7 +141,7 @@ abstract class ToolPackage {
 | ------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `create_task` | Create a task from a `title` plus optional structured fields: description, milestone, acceptance_criteria, priority, type, links, and the six plan arrays. All values validated against the configured limits.                                                                                                                                                                                                                                                                          |
 | `read_task`   | Read a task by id (full structured fields and progress log; shortened ids of at least 8 characters accepted when unique), list all tasks that are not done, list available tasks (`available` flag), filter listings by `status`, `priority`, `type` or exact `milestone`, and search task fields with a case-insensitive JavaScript regex (`query` + optional `strict` flag), with matches annotated via `matchedFields`. Listings preview long text fields at `historyPreviewLength`. |
-| `update_task` | Set a task status, refine any structured field (title, description, milestone, empty string clears it, priority, type, and the array fields; arrays replace the whole list), append a progress-log entry, and/or add a dependency. Accepts shortened ids for both `id` and `dependency_id`.                                                                                                                                                                                             |
+| `update_task` | Set a task status, refine any structured field (title, description, milestone, empty string clears it, priority, type, and the array fields; arrays replace the whole list), append a progress-log entry, and/or add or remove a dependency. Accepts shortened ids for `id`, `dependency_id` and `remove_dependency_id`.                                                                                                                                                                |
 
 ## Dependencies
 

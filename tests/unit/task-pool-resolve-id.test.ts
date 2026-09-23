@@ -68,14 +68,14 @@ describe('TaskPool.resolveId', () => {
                 title: 'Short id task',
                 history: '',
                 status: 'ready',
-                dependencies: []
+                dependencies: [],
             } as unknown as Task);
             await store.set({
                 id: 'aaaaaaaa-1111-4111-8111-111111111111',
                 title: 'Long id task',
                 history: '',
                 status: 'ready',
-                dependencies: []
+                dependencies: [],
             });
             const loaded = await TaskPool.create(new TaskConfiguration({ dir }));
             const exact = loaded.resolveId('aaaaaaaa');
@@ -102,14 +102,14 @@ describe('TaskPool.resolveId', () => {
                 title: 'Task A',
                 history: '',
                 status: 'ready',
-                dependencies: []
+                dependencies: [],
             });
             await store.set({
                 id: 'aaaaaaaa-2222-4222-8222-222222222222',
                 title: 'Task B',
                 history: '',
                 status: 'ready',
-                dependencies: []
+                dependencies: [],
             });
             const loaded = await TaskPool.create(new TaskConfiguration({ dir }));
             const resolution = loaded.resolveId('aaaaaaaa');
@@ -117,7 +117,7 @@ describe('TaskPool.resolveId', () => {
             if (resolution.kind === 'ambiguous') {
                 expect(resolution.candidates).toEqual([
                     'aaaaaaaa-1111-4111-8111-111111111111',
-                    'aaaaaaaa-2222-4222-8222-222222222222'
+                    'aaaaaaaa-2222-4222-8222-222222222222',
                 ]);
             }
         } finally {

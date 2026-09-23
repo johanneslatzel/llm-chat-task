@@ -29,7 +29,7 @@ describe('CreateTaskTool', () => {
             out_of_scope: ['no frontend'],
             verification: ['npm run verify'],
             context: ['src/foo.ts is the entry point'],
-            edge_cases: ['empty input']
+            edge_cases: ['empty input'],
         });
         expect(result[0]!.status).toBe(ResultStatus.Success);
         const task = pool.getTasks()[0]!;
@@ -57,7 +57,7 @@ describe('CreateTaskTool', () => {
             type: {},
             acceptance_criteria: 'nope',
             links: 12,
-            steps: 'nope'
+            steps: 'nope',
         });
         expect(result[0]!.status).toBe(ResultStatus.Success);
         const task = pool.getTasks()[0]!;

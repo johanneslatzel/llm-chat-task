@@ -1,24 +1,27 @@
 import js from '@eslint/js';
-import tseslintParser from '@typescript-eslint/parser';
 import tseslintPlugin from '@typescript-eslint/eslint-plugin';
 import nodePlugin from 'eslint-plugin-n';
 import eslintConfigPrettier from 'eslint-config-prettier';
 
+const recommendedTSConfigs = tseslintPlugin.configs['flat/recommended'].map(
+    (config) => ({
+        ...config,
+        files: ['**/*.ts']
+    })
+);
+
 export default [
     js.configs.recommended,
+    ...recommendedTSConfigs,
     {
         files: ['**/*.ts'],
         languageOptions: {
-            parser: tseslintParser,
             parserOptions: {
                 ecmaVersion: 'latest',
                 sourceType: 'module',
                 project: true
             },
             globals: {}
-        },
-        plugins: {
-            '@typescript-eslint': tseslintPlugin
         },
         rules: {
             'no-undef': 'off',

@@ -29,7 +29,7 @@ describe('ReadTaskTool', () => {
             constraints: ['x'],
             outOfScope: ['o'],
             verification: ['v'],
-            edgeCases: ['e']
+            edgeCases: ['e'],
         });
         await pool.updateTask(id, { status: 'in_progress', history: 'working' });
         const tool = new ReadTaskTool(pool);
@@ -142,7 +142,7 @@ describe('ReadTaskTool', () => {
         const pool = await TaskPool.create();
         const id = await pool.createTask({
             title: 'Task A',
-            steps: ['x'.repeat(250)]
+            steps: ['x'.repeat(250)],
         });
         await pool.updateTask(id, { history: 'x'.repeat(500) });
         const tool = new ReadTaskTool(pool);
@@ -160,7 +160,7 @@ describe('ReadTaskTool', () => {
         const pool = await TaskPool.create();
         const id = await pool.createTask({
             title: 'Task A',
-            steps: ['y'.repeat(250)]
+            steps: ['y'.repeat(250)],
         });
         await pool.updateTask(id, { history: 'y'.repeat(500) });
         const tool = new ReadTaskTool(pool);
@@ -212,14 +212,14 @@ describe('ReadTaskTool', () => {
                 title: 'A',
                 history: '',
                 status: 'ready',
-                dependencies: []
+                dependencies: [],
             });
             await store.set({
                 id: 'aaaaaaaa-2222-4222-8222-222222222222',
                 title: 'B',
                 history: '',
                 status: 'ready',
-                dependencies: []
+                dependencies: [],
             });
             const tool = new ReadTaskTool(await TaskPool.create(new TaskConfiguration({ dir })));
             const ambiguous = await tool.execute({ id: 'aaaaaaaa' });
@@ -339,7 +339,7 @@ describe('ReadTaskTool', () => {
         const listed = parseTasks((await tool.execute({}))[0]!.result).find((t) => t.id === id)!;
         expect(listed.milestone).toBe('v2-release');
         const noMilestone = parseTasks((await tool.execute({}))[0]!.result).find(
-            (t) => t.title === 'No milestone'
+            (t) => t.title === 'No milestone',
         )!;
         expect(noMilestone.milestone).toBeUndefined();
     });
@@ -363,7 +363,7 @@ describe('ReadTaskTool', () => {
         const ready = await pool.createTask({
             title: 'Ready one',
             priority: 'high',
-            milestone: 'v2'
+            milestone: 'v2',
         });
         await pool.createTask({ title: 'Low two', milestone: 'v2' });
         const done = await pool.createTask({ title: 'Done three', milestone: 'v2' });
@@ -389,7 +389,7 @@ describe('ReadTaskTool', () => {
         const pool = await TaskPool.create();
         const id = await pool.createTask({
             title: 'Ship it',
-            milestone: 'spiel-sdk-migration'
+            milestone: 'spiel-sdk-migration',
         });
         await pool.createTask({ title: 'Unrelated' });
         const tool = new ReadTaskTool(pool);

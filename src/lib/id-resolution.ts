@@ -12,7 +12,7 @@ export type FailedIdResolution = Exclude<IdResolution, { kind: 'exact' } | { kin
  */
 export function resolveExactOrError(
     pool: TaskPool,
-    id: string
+    id: string,
 ): { ok: true; task: Task } | { ok: false; error: PartialToolResult } {
     const resolution = pool.resolveId(id);
     if (resolution.kind !== 'exact' && resolution.kind !== 'prefix') {
@@ -30,7 +30,7 @@ export function resolutionError(id: string, resolution: FailedIdResolution): Par
                 id +
                 "' matches multiple tasks:\n" +
                 resolution.candidates.join('\n'),
-            status: ResultStatus.Error
+            status: ResultStatus.Error,
         };
     }
     if (resolution.kind === 'too-short') {
@@ -41,7 +41,7 @@ export function resolutionError(id: string, resolution: FailedIdResolution): Par
                 "' is too short to identify a task. Use at least " +
                 MIN_ID_PREFIX_LENGTH +
                 ' characters or a full id.',
-            status: ResultStatus.Error
+            status: ResultStatus.Error,
         };
     }
     return { result: 'Task not found with id: ' + id, status: ResultStatus.Error };

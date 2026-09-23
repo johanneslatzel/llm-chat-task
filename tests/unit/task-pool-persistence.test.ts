@@ -64,7 +64,7 @@ describe('TaskPool persistence (store-based)', () => {
                 outOfScope: ['o'],
                 verification: ['v'],
                 context: ['ctx'],
-                edgeCases: ['e']
+                edgeCases: ['e'],
             });
             await pool.updateTask(id, { status: 'done', history: 'Saved data' });
 
@@ -129,7 +129,7 @@ describe('TaskPool persistence (store-based)', () => {
             const idB = 'aaaaaaaa-2222-4222-8222-222222222222';
             await store.set(makeTask({ id: idA, title: 'Task A' }));
             await store.set(
-                makeTask({ id: idB, title: 'Task B', status: 'pending', dependencies: [idA] })
+                makeTask({ id: idB, title: 'Task B', status: 'pending', dependencies: [idA] }),
             );
 
             const pool = await TaskPool.create(new TaskConfiguration({ dir }));
@@ -152,10 +152,10 @@ describe('TaskPool persistence (store-based)', () => {
                 description: 'no title here',
                 history: '',
                 status: 'ready',
-                dependencies: []
+                dependencies: [],
             } as unknown as Task);
             await expect(TaskPool.create(new TaskConfiguration({ dir }))).rejects.toThrow(
-                'Invalid task title in store'
+                'Invalid task title in store',
             );
         } finally {
             await rm(dir, { recursive: true, force: true });
@@ -181,15 +181,15 @@ describe('TaskPool persistence (store-based)', () => {
             const cases: Array<[string, string]> = [
                 ['bad label', 'Milestone must not contain whitespace'],
                 ['m'.repeat(65), 'Milestone must be at most 64 characters'],
-                ['café', 'Milestone must contain only ASCII characters']
+                ['café', 'Milestone must contain only ASCII characters'],
             ];
             for (const [milestone, message] of cases) {
                 const store = new JsonFileStore<Task>({ dir });
                 await store.set(
-                    makeTask({ id: 'aaaaaaaa-1111-4111-8111-111111111111', title: 'A', milestone })
+                    makeTask({ id: 'aaaaaaaa-1111-4111-8111-111111111111', title: 'A', milestone }),
                 );
                 await expect(TaskPool.create(new TaskConfiguration({ dir }))).rejects.toThrow(
-                    message
+                    message,
                 );
             }
         } finally {
@@ -208,9 +208,9 @@ describe('TaskPool persistence (store-based)', () => {
                         history: '',
                         status: 'ready',
                         dependencies: [],
-                        priority: 'urgent'
+                        priority: 'urgent',
                     } as unknown as Task,
-                    'Invalid priority'
+                    'Invalid priority',
                 ],
                 [
                     {
@@ -219,9 +219,9 @@ describe('TaskPool persistence (store-based)', () => {
                         history: '',
                         status: 'ready',
                         dependencies: [],
-                        type: 'epic'
+                        type: 'epic',
                     } as unknown as Task,
-                    'Invalid type'
+                    'Invalid type',
                 ],
                 [
                     {
@@ -230,9 +230,9 @@ describe('TaskPool persistence (store-based)', () => {
                         history: '',
                         status: 'ready',
                         dependencies: [],
-                        links: ['nope']
+                        links: ['nope'],
                     } as Task,
-                    'Links items must be valid URLs'
+                    'Links items must be valid URLs',
                 ],
                 [
                     {
@@ -241,16 +241,16 @@ describe('TaskPool persistence (store-based)', () => {
                         history: '',
                         status: 'ready',
                         dependencies: [],
-                        steps: ['x'.repeat(301)]
+                        steps: ['x'.repeat(301)],
                     } as Task,
-                    'Steps items must be at most 300 characters'
-                ]
+                    'Steps items must be at most 300 characters',
+                ],
             ];
             for (const [task, message] of invalid) {
                 const store = new JsonFileStore<Task>({ dir });
                 await store.set(task);
                 await expect(TaskPool.create(new TaskConfiguration({ dir }))).rejects.toThrow(
-                    message
+                    message,
                 );
             }
         } finally {
@@ -266,11 +266,11 @@ describe('TaskPool persistence (store-based)', () => {
                 makeTask({
                     id: 'aaaaaaaa-1111-4111-8111-111111111111',
                     title: 'A',
-                    description: 42 as unknown as string
-                })
+                    description: 42 as unknown as string,
+                }),
             );
             await expect(TaskPool.create(new TaskConfiguration({ dir }))).rejects.toThrow(
-                'Description must be a string'
+                'Description must be a string',
             );
 
             const store2 = new JsonFileStore<Task>({ dir });
@@ -278,11 +278,11 @@ describe('TaskPool persistence (store-based)', () => {
                 makeTask({
                     id: 'aaaaaaaa-1111-4111-8111-111111111111',
                     title: 'A',
-                    description: 'z'.repeat(501)
-                })
+                    description: 'z'.repeat(501),
+                }),
             );
             await expect(TaskPool.create(new TaskConfiguration({ dir }))).rejects.toThrow(
-                'Description must be at most 500 characters'
+                'Description must be at most 500 characters',
             );
         } finally {
             await rm(dir, { recursive: true, force: true });
@@ -312,10 +312,10 @@ describe('TaskPool persistence (store-based)', () => {
                 title: 'A',
                 history: 42,
                 status: 'ready',
-                dependencies: []
+                dependencies: [],
             } as unknown as Task);
             await expect(TaskPool.create(new TaskConfiguration({ dir }))).rejects.toThrow(
-                'Invalid task history in store'
+                'Invalid task history in store',
             );
 
             const badStatus = new JsonFileStore<Task>({ dir });
@@ -324,10 +324,10 @@ describe('TaskPool persistence (store-based)', () => {
                 title: 'A',
                 history: '',
                 status: 'finished',
-                dependencies: []
+                dependencies: [],
             } as unknown as Task);
             await expect(TaskPool.create(new TaskConfiguration({ dir }))).rejects.toThrow(
-                'Invalid task status in store'
+                'Invalid task status in store',
             );
         } finally {
             await rm(dir, { recursive: true, force: true });
@@ -342,8 +342,8 @@ describe('TaskPool persistence (store-based)', () => {
                 makeTask({
                     id: idA,
                     title: 'A',
-                    dependencies: ['bbbbbbbb-0000-0000-0000-000000000000']
-                })
+                    dependencies: ['bbbbbbbb-0000-0000-0000-000000000000'],
+                }),
             );
             const pool = await TaskPool.create(new TaskConfiguration({ dir }));
             const tasks = pool.getTasks();

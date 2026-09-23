@@ -16,7 +16,7 @@ export const PLAN_FIELDS = [
     'outOfScope',
     'verification',
     'context',
-    'edgeCases'
+    'edgeCases',
 ] as const satisfies readonly PlanField[];
 
 /** Every string-array task field; scanned by `read_task` queries (items reported as `<field>[<index>]`). */
@@ -47,7 +47,7 @@ const ARRAY_ARG_FIELDS: ReadonlyArray<readonly [string, (typeof STRING_ARRAY_FIE
     ['constraints', 'constraints'],
     ['out_of_scope', 'outOfScope'],
     ['verification', 'verification'],
-    ['edge_cases', 'edgeCases']
+    ['edge_cases', 'edgeCases'],
 ];
 
 /**
@@ -56,7 +56,7 @@ const ARRAY_ARG_FIELDS: ReadonlyArray<readonly [string, (typeof STRING_ARRAY_FIE
  */
 export function applyStructuredFields(
     args: Record<string, unknown>,
-    target: StructuredFields
+    target: StructuredFields,
 ): void {
     if (typeof args.description === 'string') {
         target.description = args.description;
