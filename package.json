@@ -1,6 +1,6 @@
 {
     "name": "@johannes.latzel/llm-chat-task",
-    "version": "0.4.0",
+    "version": "0.5.0",
     "description": "Task pool and task management tools for the llm-chat ecosystem",
     "license": "MIT",
     "files": [
@@ -25,7 +25,7 @@
         "tool"
     ],
     "engines": {
-        "node": ">=18"
+        "node": ">=22"
     },
     "publishConfig": {
         "access": "public"
@@ -65,7 +65,7 @@
     },
     "dependencies": {
         "@johannes.latzel/json-file-store": "^0.1.0",
-        "@johannes.latzel/llm-chat": "^0.7.0",
+        "@johannes.latzel/llm-chat": "^0.10.0",
         "async-mutex": "^0.5.0"
     },
     "devDependencies": {

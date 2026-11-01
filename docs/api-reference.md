@@ -12,6 +12,15 @@ All tools return a `PartialToolResult` with shape:
 }
 ```
 
+## Hidden parameter aliases
+
+`create_task` and `update_task` accept hidden singular aliases for their array
+plan fields: `acceptance_criterion` for `acceptance_criteria`, `step` for
+`steps`, `constraint` for `constraints`, `edge_case` for `edge_cases`, and
+`link` for `links`. Aliases are normalized before execution and never appear in
+the tool schemas. See the
+[llm-chat tool documentation](https://github.com/johanneslatzel/llm-chat/blob/main/docs/tools/defining-tools.md#hidden-parameter-aliases).
+
 ## TaskPool
 
 Task pool backed by an `ObjectStore`. Each task has an id, a required short `title`, optional
@@ -131,7 +140,7 @@ import { TaskPool } from '@johannes.latzel/llm-chat-task';
 const pool = await TaskPool.create();
 
 // file-backed pool, pre-loaded from any stored tasks
-const pool = await TaskPool.create(new TaskConfiguration({ dir: './tasks' }));
+const filePool = await TaskPool.create(new TaskConfiguration({ dir: './tasks' }));
 ```
 
 With a `dir` configured:

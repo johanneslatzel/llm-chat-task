@@ -18,6 +18,8 @@ plus structured plan fields: description, acceptance criteria, priority, type,
 reference links, and plan arrays for steps, context, constraints, out-of-scope
 work, verification, and edge cases. Tasks read as small, executable specs.
 
+![llm-chat-task architecture](https://raw.githubusercontent.com/johanneslatzel/llm-chat-task/main/docs/assets/llm-chat-task-architecture.svg)
+
 ## Features
 
 - store-backed task pool with dependency tracking, cycle detection, and optional file persistence
@@ -30,7 +32,7 @@ work, verification, and edge cases. Tasks read as small, executable specs.
 
 ## Prerequisites
 
-- Node.js >= 18
+- Node.js >= 22
 
 ## Installation
 

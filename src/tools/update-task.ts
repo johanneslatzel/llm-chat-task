@@ -77,14 +77,14 @@ export class UpdateTaskTool extends Tool {
                             ' items, each at most ' +
                             pool.config.maxAcceptanceCriteriaLength +
                             ' characters.',
-                    ),
+                    ).accepts('acceptance_criterion'),
                     steps: ToolParameterProperty.array(
                         'New steps list. Replaces the whole array. At most ' +
                             pool.config.maxPlanFieldCount +
                             ' items, each at most ' +
                             pool.config.maxPlanFieldLength +
                             ' characters.',
-                    ),
+                    ).accepts('step'),
                     context: ToolParameterProperty.array(
                         'New context list. Replaces the whole array. At most ' +
                             pool.config.maxPlanFieldCount +
@@ -98,7 +98,7 @@ export class UpdateTaskTool extends Tool {
                             ' items, each at most ' +
                             pool.config.maxPlanFieldLength +
                             ' characters.',
-                    ),
+                    ).accepts('constraint'),
                     out_of_scope: ToolParameterProperty.array(
                         'New out-of-scope list. Replaces the whole array. At most ' +
                             pool.config.maxPlanFieldCount +
@@ -119,7 +119,7 @@ export class UpdateTaskTool extends Tool {
                             ' items, each at most ' +
                             pool.config.maxPlanFieldLength +
                             ' characters.',
-                    ),
+                    ).accepts('edge_case'),
                     priority: ToolParameterProperty.string(
                         'New priority: low, medium or high. Omit to leave unchanged.',
                     ),
@@ -130,7 +130,7 @@ export class UpdateTaskTool extends Tool {
                         'New links list. Replaces the whole array. At most ' +
                             pool.config.maxLinksPerTask +
                             ' items, each a valid URL.',
-                    ),
+                    ).accepts('link'),
                 },
                 ['id'],
             ),

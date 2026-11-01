@@ -43,14 +43,14 @@ export class CreateTaskTool extends Tool {
                             ' items, each at most ' +
                             pool.config.maxAcceptanceCriteriaLength +
                             ' characters.',
-                    ),
+                    ).accepts('acceptance_criterion'),
                     steps: ToolParameterProperty.array(
                         'Ordered execution steps, one concrete action per item. At most ' +
                             pool.config.maxPlanFieldCount +
                             ' items, each at most ' +
                             pool.config.maxPlanFieldLength +
                             ' characters.',
-                    ),
+                    ).accepts('step'),
                     context: ToolParameterProperty.array(
                         'Relevant files, entry points, existing patterns, and architectural decisions the executor cannot infer from the code. At most ' +
                             pool.config.maxPlanFieldCount +
@@ -64,7 +64,7 @@ export class CreateTaskTool extends Tool {
                             ' items, each at most ' +
                             pool.config.maxPlanFieldLength +
                             ' characters.',
-                    ),
+                    ).accepts('constraint'),
                     out_of_scope: ToolParameterProperty.array(
                         'Work explicitly excluded so the executor does not over-reach. At most ' +
                             pool.config.maxPlanFieldCount +
@@ -85,7 +85,7 @@ export class CreateTaskTool extends Tool {
                             ' items, each at most ' +
                             pool.config.maxPlanFieldLength +
                             ' characters.',
-                    ),
+                    ).accepts('edge_case'),
                     priority: ToolParameterProperty.string(
                         'Stated importance: low, medium or high. Defaults to low when omitted.',
                     ),
@@ -96,7 +96,7 @@ export class CreateTaskTool extends Tool {
                         'Reference URLs such as docs, issues, or designs. At most ' +
                             pool.config.maxLinksPerTask +
                             ' items, each a valid URL.',
-                    ),
+                    ).accepts('link'),
                 },
                 ['title'],
             ),

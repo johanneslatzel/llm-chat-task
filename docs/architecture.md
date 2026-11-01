@@ -1,5 +1,7 @@
 # Architecture
 
+![llm-chat-task architecture](assets/llm-chat-task-architecture.svg)
+
 ## Overview
 
 `llm-chat-task` provides a store-backed task pool with dependency tracking plus
@@ -47,9 +49,9 @@ setting is resolved at construction time: an explicit option wins, then a
 Environment-derived values are clamped to a minimum of 1. See the full
 defaults table in the [API Reference](api-reference.md#taskconfiguration).
 
-The configuration is captured by the pool, the three tool classes, and the
-package tutorial at construction, so a pool enforces its limits consistently
-for its whole lifetime. Invalid env values (empty, non-numeric, too small)
+The configuration is captured by the pool at construction; the three tool
+classes and the package tutorial read the limits from `pool.config`, so a
+pool enforces its limits consistently for its whole lifetime. Invalid env values (empty, non-numeric, too small)
 fall back to the default (or clamp to 1).
 
 ### TaskPool
@@ -75,7 +77,7 @@ fall back to the default (or clamp to 1).
   of an id the task does not depend on
 - `clear()`: resets the pool (also empties the backing store)
 
-The pool always has a backing {@link ObjectStore} from
+The pool always has a backing `ObjectStore` from
 `@johannes.latzel/json-file-store`. `TaskPool.create` builds it: without a
 configured `dir` it is a fresh in-memory store, with `dir` a `JsonFileStore`
 on that directory. When a `dir` is configured, `createTask` and `updateTask`
