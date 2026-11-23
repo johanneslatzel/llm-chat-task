@@ -77,12 +77,24 @@ export type UpdateTaskInput = {
     edgeCases?: string[];
 };
 
+/** Options for creating a task pool with an explicit storage backend. */
+export interface TaskPoolOptions {
+    /** Pool limits and the JSON-directory fallback. */
+    readonly configuration?: TaskConfiguration;
+    /**
+     * Storage backend. When set it is loaded on create and receives every
+     * write; `configuration.dir` is ignored.
+     */
+    readonly store?: ObjectStore<Task>;
+}
+
 /**
  * Task pool with dependency tracking and a backing {@link ObjectStore}.
  *
- * Create pools via {@link TaskPool.create}: without a configured `dir` the
- * pool is backed by a fresh in-memory store; with `dir` it is backed by a
- * `JsonFileStore` on that directory and pre-loaded from any stored tasks.
+ * Create pools via {@link TaskPool.create}: without a store or configured
+ * `dir` the pool is backed by a fresh in-memory store; with `dir` it is
+ * backed by a `JsonFileStore` on that directory and pre-loaded from any
+ * stored tasks. An injected store takes precedence over `dir`.
  */
 export class TaskPool {
     /** Limits enforced by this pool; fixed at construction. */
@@ -96,24 +108,31 @@ export class TaskPool {
         this.storeRef = store;
     }
 
+    /** Creates a task pool from a configuration (backward compatible). */
+    static create(config?: TaskConfiguration): Promise<TaskPool>;
+    /** Creates a task pool with an optional injected storage backend. */
+    static create(options: TaskPoolOptions): Promise<TaskPool>;
     /**
-     * Creates a task pool. Without a configured `dir` the pool is backed by
-     * a fresh in-memory store. With `dir` (option or `LLM_CHAT_TASK_DIR` env
-     * var) the pool is backed by a `JsonFileStore` on that directory and
-     * loads any stored tasks, validating each strictly and re-establishing
-     * dependency references (dangling dependency ids are pruned). Later
-     * writes persist back into the store.
-     *
-     * @param config Pool configuration (persistence directory and limits);
-     * defaults to a fresh {@link TaskConfiguration}.
+     * Creates a task pool. A store supplied in {@link TaskPoolOptions} is
+     * loaded and receives every write, and takes precedence over
+     * `configuration.dir`. Without a store, `dir` selects a
+     * `JsonFileStore`; without either the pool uses a fresh in-memory store.
+     * Stored tasks are validated strictly and dependency references are
+     * re-established (dangling dependency ids are pruned).
      */
-    static async create(config?: TaskConfiguration): Promise<TaskPool> {
-        const resolved = config ?? new TaskConfiguration();
-        const store = resolved.dir
-            ? new JsonFileStore<Task>({ dir: resolved.dir })
-            : new MemoryStore<Task>();
-        const pool = new TaskPool(resolved, store);
-        if (resolved.dir) {
+    static async create(input?: TaskConfiguration | TaskPoolOptions): Promise<TaskPool> {
+        const configuration =
+            input instanceof TaskConfiguration
+                ? input
+                : (input?.configuration ?? new TaskConfiguration());
+        const injected = input instanceof TaskConfiguration ? undefined : input?.store;
+        const store =
+            injected ??
+            (configuration.dir
+                ? new JsonFileStore<Task>({ dir: configuration.dir })
+                : new MemoryStore<Task>());
+        const pool = new TaskPool(configuration, store);
+        if (injected !== undefined || configuration.dir !== undefined) {
             await pool.loadFromStore();
         }
         return pool;

@@ -4,7 +4,7 @@ import {
     Tool,
     ToolParameterProperty,
     ToolParameters,
-} from '@johannes.latzel/llm-chat';
+} from '@johannes.latzel/llm-chat-tool';
 import { applyStructuredFields } from '../lib/fields.js';
 import { CreateTaskInput, TaskPool } from '../pool.js';
 

@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { ResultStatus } from '@johannes.latzel/llm-chat';
+import { ResultStatus } from '@johannes.latzel/llm-chat-tool';
 import { CreateTaskTool, TaskPool, UpdateTaskTool } from '../../src/index.js';
 
 const ALIAS_PAIRS = [
@@ -16,7 +16,7 @@ describe('hidden singular aliases', () => {
         const tools = [new CreateTaskTool(pool), new UpdateTaskTool(pool)];
 
         for (const tool of tools) {
-            const parameters = tool.toOpenAI().function.parameters as {
+            const parameters = tool.definition().parameters as {
                 properties: Record<string, unknown>;
             };
             for (const [canonical, alias] of ALIAS_PAIRS) {

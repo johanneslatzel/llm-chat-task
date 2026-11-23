@@ -13,7 +13,7 @@ export {
 export { TaskConfiguration } from './lib/config.js';
 export type { Task, TaskStatus, TaskPriority, TaskType, PlanField } from './types.js';
 export { TaskPool } from './pool.js';
-export type { CreateTaskInput, UpdateTaskInput, IdResolution } from './pool.js';
+export type { CreateTaskInput, UpdateTaskInput, IdResolution, TaskPoolOptions } from './pool.js';
 export { CreateTaskTool } from './tools/create-task.js';
 export { ReadTaskTool } from './tools/read-task.js';
 export { UpdateTaskTool } from './tools/update-task.js';

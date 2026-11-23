@@ -28,6 +28,19 @@ const pool = await TaskPool.create(new TaskConfiguration({ dir: './tasks' }));
 // createTask/updateTask auto-persist; existing tasks are loaded on create
 ```
 
-## Next steps
+A custom `ObjectStore<Task>` can replace the JSON backend:
+
+```typescript
+import { TaskPool, type Task } from '@johannes.latzel/llm-chat-task';
+import { MemoryStore } from '@johannes.latzel/json-file-store';
+
+const store = new MemoryStore<Task>();
+const pool = await TaskPool.create({ store });
+```
+
+An injected store is loaded on create and receives every task write. It takes
+precedence over `configuration.dir`.
+
+## Full API
 
 See the [API Reference](api-reference.md) for full tool documentation and [Architecture](architecture.md) for design details.

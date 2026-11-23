@@ -1,4 +1,4 @@
-import { PartialToolResult, ResultStatus } from '@johannes.latzel/llm-chat';
+import { PartialToolResult, ResultStatus } from '@johannes.latzel/llm-chat-tool';
 import { MIN_ID_PREFIX_LENGTH } from '../constants.js';
 import { IdResolution, TaskPool } from '../pool.js';
 import type { Task } from '../types.js';

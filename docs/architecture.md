@@ -42,10 +42,12 @@ automatically. Only `ready`, `in_progress` and `done` can be set via `updateTask
 
 ### Configuration
 
-The persistence directory and task limits live in a `TaskConfiguration`
-passed to `TaskPool.create(config?)` (defaulting to a fresh instance). Each
-setting is resolved at construction time: an explicit option wins, then a
-`LLM_CHAT_TASK_*` environment variable, then the `DEFAULT_*` constant.
+The persistence directory and task limits live in a `TaskConfiguration`.
+Callers pass either that configuration or a `TaskPoolOptions` object with a
+`configuration` and an optional injected `ObjectStore<Task>`. Each
+configuration setting is resolved at construction time: an explicit option
+wins, then a `LLM_CHAT_TASK_*` environment variable, then the `DEFAULT_*`
+constant.
 Environment-derived values are clamped to a minimum of 1. See the full
 defaults table in the [API Reference](api-reference.md#taskconfiguration).
 
@@ -77,18 +79,21 @@ fall back to the default (or clamp to 1).
   of an id the task does not depend on
 - `clear()`: resets the pool (also empties the backing store)
 
-The pool always has a backing `ObjectStore` from
-`@johannes.latzel/json-file-store`. `TaskPool.create` builds it: without a
-configured `dir` it is a fresh in-memory store, with `dir` a `JsonFileStore`
-on that directory. When a `dir` is configured, `createTask` and `updateTask`
-persist the (changed) task inside the pool mutex (writes stay ordered) and
-`clear()` also empties the store.
+The pool always has a backing `ObjectStore<Task>`. The interface and default
+backends come from `@johannes.latzel/json-file-store`; an injected store may be
+any implementation. `TaskPool.create` selects it: an injected
+`TaskPoolOptions.store` wins, otherwise a configured `dir` selects a
+`JsonFileStore` on that directory, otherwise the pool uses a fresh
+`MemoryStore`. An injected store can be any implementation of the six-method
+`ObjectStore` interface. `createTask` and `updateTask` persist the changed
+task inside the pool mutex (writes stay ordered) and `clear()` also empties
+the store.
 
-A pool backed by a `dir` pre-loads any stored tasks on `TaskPool.create`
-(option or `LLM_CHAT_TASK_DIR` env var), validating each stored task
-strictly, pruning dangling dependency ids, and keeping the pool bound to that
-store so later writes persist back into it. Legacy `save`/`loadFromFile`/
-`TaskPool.load(path)`/`loadStored` are gone: persistence is always store-backed.
+A pool with an injected store or a `dir` pre-loads any stored tasks on
+`TaskPool.create`, validating each stored task strictly, pruning dangling
+dependency ids, and keeping the pool bound to that store so later writes
+persist back into it. Legacy `save`/`loadFromFile`/`TaskPool.load(path)`/
+`loadStored` are gone: persistence is always store-backed.
 
 Tasks reference their dependencies by id, so a single `Task` never carries the
 whole dependency tree and task lists serialize cleanly. Dangling dependency ids
@@ -106,12 +111,12 @@ append-only progress log: every `updateTask(..., { history })` call prepends an
 ISO timestamp and appends the entry, and appends beyond `maxHistoryLength`
 (default 10,000) are rejected. All `updateTask` validation runs before any field
 is mutated, so a rejected update never leaves a task half-changed. Task listings
-preview long text fields at `historyPreviewLength` (default 200) characters;
+preview `history` and each string-array item at `historyPreviewLength` (default 200) characters;
 single-task reads return full fields.
 
 ### Tool classes
 
-Each tool extends `Tool` from `@johannes.latzel/llm-chat`:
+Each tool extends `Tool` from `@johannes.latzel/llm-chat-tool`:
 
 1. Constructor calls `super(name, description, params)` with a `ToolParameters` instance
 2. `onExecute()` validates parameters (`typeof` guards), performs the operation, and returns `PartialToolResult`
@@ -123,7 +128,7 @@ record a completion summary when marking a task done.
 
 ### Package classes
 
-The `ToolPackage` abstract class (from `@johannes.latzel/llm-chat`) groups related tools for registration:
+The `ToolPackage` abstract class (from `@johannes.latzel/llm-chat-tool`) groups related tools for registration:
 
 ```typescript
 abstract class ToolPackage {
@@ -142,12 +147,14 @@ abstract class ToolPackage {
 | Tool          | Description                                                                                                                                                                                                                                                                                                                                                                                                                                                                             |
 | ------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `create_task` | Create a task from a `title` plus optional structured fields: description, milestone, acceptance_criteria, priority, type, links, and the six plan arrays. All values validated against the configured limits.                                                                                                                                                                                                                                                                          |
-| `read_task`   | Read a task by id (full structured fields and progress log; shortened ids of at least 8 characters accepted when unique), list all tasks that are not done, list available tasks (`available` flag), filter listings by `status`, `priority`, `type` or exact `milestone`, and search task fields with a case-insensitive JavaScript regex (`query` + optional `strict` flag), with matches annotated via `matchedFields`. Listings preview long text fields at `historyPreviewLength`. |
+| `read_task`   | Read a task by id (full structured fields and progress log; shortened ids of at least 8 characters accepted when unique), list all tasks that are not done, list available tasks (`available` flag), filter listings by `status`, `priority`, `type` or exact `milestone`, and search task fields with a case-insensitive JavaScript regex (`query` + optional `strict` flag), with matches annotated via `matchedFields`. Listings preview `history` and string-array items at `historyPreviewLength`. |
 | `update_task` | Set a task status, refine any structured field (title, description, milestone, empty string clears it, priority, type, and the array fields; arrays replace the whole list), append a progress-log entry, and/or add or remove a dependency. Accepts shortened ids for `id`, `dependency_id` and `remove_dependency_id`.                                                                                                                                                                |
 
 ## Dependencies
 
-- `llm-chat`: framework providing `Tool`, `ToolParameters`, etc.
+- `llm-chat-tool`: framework providing `Tool`, `ToolParameters`, etc.
+- `env`: typed environment readers
 - `async-mutex`: serializes pool mutations
-- `json-file-store`: the `ObjectStore` backend every pool is backed by
-  (in-memory by default, or a `JsonFileStore` when `dir` is configured)
+- `json-file-store`: provides the `ObjectStore` contract, the default
+  `MemoryStore` and `JsonFileStore` backends, and injected backends can
+  implement the same interface

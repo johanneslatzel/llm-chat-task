@@ -5,7 +5,7 @@ import { join } from 'node:path';
 import { JsonFileStore } from '@johannes.latzel/json-file-store';
 import { TaskConfiguration } from '../../src/lib/config.js';
 import { TaskPool, ReadTaskTool } from '../../src/index.js';
-import { ResultStatus } from '@johannes.latzel/llm-chat';
+import { ResultStatus } from '@johannes.latzel/llm-chat-tool';
 import type { Task } from '../../src/types.js';
 
 type SerializedTask = Task & { unfinishedDependencies: string[] };

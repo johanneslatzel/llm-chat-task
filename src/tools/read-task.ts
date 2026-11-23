@@ -4,7 +4,7 @@ import {
     Tool,
     ToolParameterProperty,
     ToolParameters,
-} from '@johannes.latzel/llm-chat';
+} from '@johannes.latzel/llm-chat-tool';
 import { MIN_ID_PREFIX_LENGTH } from '../constants.js';
 import { PRIORITIES, STATUSES, STRING_ARRAY_FIELDS, TYPES } from '../lib/fields.js';
 import { resolveExactOrError } from '../lib/id-resolution.js';

@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { TaskPool, UpdateTaskTool } from '../../src/index.js';
-import { ResultStatus } from '@johannes.latzel/llm-chat';
+import { ResultStatus } from '@johannes.latzel/llm-chat-tool';
 
 describe('UpdateTaskTool dependency removal', () => {
     it('removes a dependency and derives readiness', async () => {

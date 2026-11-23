@@ -1,4 +1,4 @@
-import { ToolPackage } from '@johannes.latzel/llm-chat';
+import { ToolPackage } from '@johannes.latzel/llm-chat-tool';
 import type { TaskPool } from '../pool.js';
 import { CreateTaskTool } from '../tools/create-task.js';
 import { ReadTaskTool } from '../tools/read-task.js';

@@ -19,7 +19,7 @@ plan fields: `acceptance_criterion` for `acceptance_criteria`, `step` for
 `steps`, `constraint` for `constraints`, `edge_case` for `edge_cases`, and
 `link` for `links`. Aliases are normalized before execution and never appear in
 the tool schemas. See the
-[llm-chat tool documentation](https://github.com/johanneslatzel/llm-chat/blob/main/docs/tools/defining-tools.md#hidden-parameter-aliases).
+[llm-chat tool documentation](https://github.com/johanneslatzel/llm-chat-tool/blob/main/docs/tools/defining-tools.md#hidden-parameter-aliases).
 
 ## TaskPool
 
@@ -127,32 +127,41 @@ partially modifies the task.
 
 ### Store backend
 
-Every `TaskPool` is backed by an `ObjectStore<Task>` from
-`@johannes.latzel/json-file-store`. Without a configured directory the pool
-uses a fresh `MemoryStore`; with a `dir` (option or `LLM_CHAT_TASK_DIR` env
-var) it uses a `JsonFileStore` on that directory:
+Every `TaskPool` is backed by an `ObjectStore<Task>`. The `ObjectStore`
+interface and the default `MemoryStore`/`JsonFileStore` backends come from
+`@johannes.latzel/json-file-store`; a caller may inject any implementation. The
+default backend is selected from
+`TaskConfiguration.dir`: without a directory the pool uses a fresh
+`MemoryStore`, with a directory (option or `LLM_CHAT_TASK_DIR` env var) it
+uses a `JsonFileStore` on that directory.
+
+Callers that need another backend pass `TaskPoolOptions`:
 
 ```typescript
-import { TaskConfiguration } from '@johannes.latzel/llm-chat-task';
-import { TaskPool } from '@johannes.latzel/llm-chat-task';
-
-// in-memory pool
-const pool = await TaskPool.create();
-
-// file-backed pool, pre-loaded from any stored tasks
-const filePool = await TaskPool.create(new TaskConfiguration({ dir: './tasks' }));
+interface TaskPoolOptions {
+    readonly configuration?: TaskConfiguration;
+    readonly store?: ObjectStore<Task>;
+}
 ```
 
-With a `dir` configured:
+`TaskPool.create` accepts either a `TaskConfiguration` or a `TaskPoolOptions`
+object. An injected `store` is loaded on create and receives every write; it
+takes precedence over `configuration.dir`.
 
-- `createTask` and `updateTask` persist the changed task to the store
-- `clear()` also empties the store
+```typescript
+import { TaskPool, type Task } from '@johannes.latzel/llm-chat-task';
+import { MemoryStore } from '@johannes.latzel/json-file-store';
 
-`TaskPool.create` validates each stored task strictly, prunes dangling
-dependency ids, and keeps the pool bound to that store, so later writes
-persist back into it. The legacy single-file `save(path)` /
-`loadFromFile(path)` / `TaskPool.load(path)` and `loadStored()` are removed;
-persistence is always store-backed.
+const store = new MemoryStore<Task>();
+const pool = await TaskPool.create({ store });
+```
+
+Every `createTask` and `updateTask` writes the changed task to the selected
+store, and `clear()` empties it. When a store or `dir` is supplied,
+`TaskPool.create` pre-loads stored tasks, validates each strictly, prunes
+dangling dependency ids, and keeps the pool bound to that store. The legacy
+single-file `save(path)` / `loadFromFile(path)` / `TaskPool.load(path)` and
+`loadStored()` are removed; persistence is always store-backed.
 
 ## create_task
 
@@ -204,7 +213,7 @@ tasks that are not done.
 
 **Returns:** JSON. With `id`: the task with all fields plus `unfinishedDependencies`
 (short ids resolve to the full task). Without: a JSON array of the same objects,
-but long text fields (including `history` and each string-array item) are
+but `history` and each string-array item are
 truncated to a `historyPreviewLength`-character preview (default 200, suffix
 `...`). When `query` is active, each match carries `matchedFields` naming the
 fields that matched, e.g. `["title", "steps[2]"]`, and non-matching tasks are

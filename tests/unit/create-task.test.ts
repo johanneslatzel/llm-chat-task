@@ -1,6 +1,6 @@
 import { describe, it, expect, vi } from 'vitest';
 import { TaskPool, CreateTaskTool } from '../../src/index.js';
-import { ResultStatus } from '@johannes.latzel/llm-chat';
+import { ResultStatus } from '@johannes.latzel/llm-chat-tool';
 
 describe('CreateTaskTool', () => {
     it('creates a task and returns its id', async () => {

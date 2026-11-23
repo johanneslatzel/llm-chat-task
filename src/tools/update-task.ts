@@ -4,7 +4,7 @@ import {
     Tool,
     ToolParameterProperty,
     ToolParameters,
-} from '@johannes.latzel/llm-chat';
+} from '@johannes.latzel/llm-chat-tool';
 import type { UUID } from 'node:crypto';
 import { MIN_ID_PREFIX_LENGTH } from '../constants.js';
 import { applyStructuredFields } from '../lib/fields.js';
